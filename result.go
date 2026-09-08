@@ -7,10 +7,28 @@ import "slices"
 // Matched means a condition returned true, nil. Fired means an action returned
 // nil, which does not prove that it changed any state.
 type Counts struct {
-	Total, Evaluated, NotEvaluated             int
-	Matched, Unmatched, Fired, Skipped, Failed int
-	ConditionFailed, ActionFailed              int
-	PanicRecovered                             int
+	// Total is the number of rules in the captured engine snapshot.
+	Total int
+	// Evaluated is the number of conditions called.
+	Evaluated int
+	// NotEvaluated is the number of conditions never called.
+	NotEvaluated int
+	// Matched is the number of conditions that returned true, nil.
+	Matched int
+	// Unmatched is the number of conditions that returned false, nil.
+	Unmatched int
+	// Fired is the number of actions that returned nil.
+	Fired int
+	// Skipped is the number of matched actions prevented from starting.
+	Skipped int
+	// Failed is ConditionFailed plus ActionFailed.
+	Failed int
+	// ConditionFailed counts condition errors and recovered condition panics.
+	ConditionFailed int
+	// ActionFailed counts action errors and recovered action panics.
+	ActionFailed int
+	// PanicRecovered counts recovered panics already included in Failed.
+	PanicRecovered int
 }
 
 // RuleState is a rule's final execution state.

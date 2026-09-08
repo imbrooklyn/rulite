@@ -1,0 +1,100 @@
+# Rulite
+
+Rulite is a lightweight, type-safe rules engine for deterministic, explainable business decisions in Go.
+
+- **Ordinary Go types:** conditions and actions share your typed business state.
+- **Deterministic execution:** priority first, registration order for ties.
+- **Explainable outcomes:** inspect matches, successful actions, failures, and stops.
+- **Code-first rules:** compose ordinary functions with `All`, `Any`, and `Not`.
+- **Production semantics:** explicit errors, context boundaries, panic handling, and concurrency guarantees.
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+
+    "github.com/imbrooklyn/rulite"
+)
+
+type Price struct {
+    VIP      bool
+    Discount int
+}
+
+func main() {
+    vip := rulite.NewRule[Price]("pricing/vip").Priority(100).
+        When(func(_ context.Context, p *Price) (bool, error) {
+            return p.VIP, nil
+        }).Then(func(_ context.Context, p *Price) error {
+            p.Discount = 20
+            return nil
+        })
+    engine, err := rulite.NewEngine(vip)
+    if err != nil { panic(err) }
+    price := Price{VIP: true}
+    result, err := engine.Fire(context.Background(), &price)
+    if err != nil { panic(err) }
+    fmt.Printf("Discount: %d%%\n", price.Discount)
+    fmt.Print(result.Explain())
+}
+```
+
+## Install
+
+Requires **Go 1.27+**. The root runtime depends only on the Go standard library.
+
+```sh
+go get github.com/imbrooklyn/rulite
+```
+
+## Why not if/else?
+
+A few simple, stable `if` statements are fine. Rulite helps when dozens of business rules need priorities, first-match or first-fire selection, consistent error handling, and an explanation of what happened. It organizes those decisions while keeping business logic in Go.
+
+## Execution essentials
+
+`NewRule[T](id).Priority(n).When(condition).Then(action)` builds an immutable rule. `Priority` is optional and defaults to zero. `NewEngine(rules...)` validates IDs and callbacks, then freezes priority descending and registration order ascending. IDs are unique, 1-128 bytes, and match `^[a-z0-9][a-z0-9._/-]{0,127}$`.
+
+Each condition runs immediately before its matched action. **Conditions must only read input.** This is a contract, not a Go type-system restriction. **Actions may mutate input or perform side effects.** Later conditions see earlier action changes. The engine does not roll back, retry, or compensate, including after an error or panic.
+
+A rule is **Matched** only when its condition returns `true, nil`, and **Fired** only when its action returns `nil`. Fired does not prove a field was changed. For field attribution, record business provenance such as `AppliedBy rulite.RuleID`; see [pricing](examples/pricing).
+
+The default policy evaluates all rules and stops on either phase's first error. For provider fallback:
+
+```go
+policy := rulite.DefaultPolicy().
+    WithStop(rulite.StopOnFirstFire).
+    WithActionErrors(rulite.ContinueOnError)
+result, err := engine.Fire(ctx, &input, rulite.WithPolicy(policy))
+```
+
+`StopOnFirstMatch` stops after the first matched action attempt, even when that action fails under `ContinueOnError`. `StopOnFirstFire` can try the next rule after a continued action error. Both stop the entire execution. Earlier errors remain in `err` even when fallback succeeds; always inspect both `Result` and `error`.
+
+`result.Explain()` is always available. `result.Rule(id)` exposes one rule's outcome, order, and skip or non-evaluation reason. Add `rulite.WithTrace()` to `Fire` for timings and built-in combinator child outcomes. Text explanations are for people; use structured accessors for integration.
+
+Panics are recovered and terminal by default. Context cancellation is checked at callback boundaries; callbacks must cooperate to return promptly. Engine and completed Result values support concurrent use. Each Fire needs independently owned input, or caller synchronization around the entire execution. Callers also synchronize shared callback captures and treat returned error objects and panic payloads as read-only.
+
+## Runnable examples
+
+From a checkout:
+
+```sh
+go run ./examples/pricing
+go run ./examples/payment_routing
+go run ./examples/risk_decision
+go test ./...
+```
+
+- [Pricing](examples/pricing): VIP, new-customer, and high-value offers with field provenance.
+- [Payment routing](examples/payment_routing): Stripe, Adyen, PayPal, and bank-transfer fallback using local provider stubs.
+- [Risk decision](examples/risk_decision): allow, review, reject, nested conditions, Trace, and a conservative default when evidence fails.
+
+## Scope and documentation
+
+v0.1 provides typed rules, immutable engines, deterministic single-pass execution, policies, Result, Explain, and opt-in Trace. It has no public RuleSet/Compile, Observer, groups, CEL, dynamic definitions, hot reload, or telemetry integration.
+
+Read [architecture and non-goals](docs/architecture.md), the [roadmap](docs/roadmap.md), [benchmark methodology and baseline](docs/benchmarks.md), and [contributing](CONTRIBUTING.md). Later version goals are plans, not available APIs. Rulite does not replace all conditionals or provide inference, a rule language, workflow orchestration, or automatic rollback.
+
+Licensed under [Apache-2.0](LICENSE).

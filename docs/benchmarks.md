@@ -1,0 +1,164 @@
+# Benchmarks
+
+These measurements describe the v0.1 workloads in [benchmark_test.go](../benchmark_test.go). They are a reproducible machine baseline, not a latency SLA or a prediction for business callbacks, network providers, or other hardware.
+
+## Environment and reproduction
+
+- Date: 2026-09-08.
+- CPU: Apple M4 Pro; Go reports 12 logical CPUs and default GOMAXPROCS 12.
+- OS: macOS 26.5.2 (25F84); GOOS/GOARCH: darwin/arm64.
+- Toolchain: `go version go1.27.0 darwin/arm64`; module minimum: Go 1.27.
+- Default compiler optimization and garbage collector settings; race instrumentation disabled for timing.
+- Each workload ran three times with a 100 ms target duration. Tables report the median of each metric across those three samples. This short baseline does not estimate confidence intervals or tail latency.
+
+From a checkout, reproduce with:
+
+```sh
+go version
+go env GOOS GOARCH
+go test -run '^$' -bench . -benchmem -benchtime=100ms -count=3
+```
+
+For less noise, repeat on an otherwise idle machine, use a longer benchtime, and compare distributions with identical toolchains and workloads. OS scheduling, CPU power state, garbage collection, and other applications affect results. The throughput column counts evaluated rules per second, not independent business decisions. A dash means the workload does not evaluate rules during timing.
+
+## Method
+
+Engine build timing includes validation, index creation, and mixed-priority sorting; rule definitions and closures are prepared outside timing. Fire timing uses a prebuilt engine and a reset input per iteration. Conditions perform simple typed reads and actions increment a counter. The 10% workload matches every tenth rule. Small count, stop, error-presence, and mutation assertions are included in Fire timings; structural ledger checks run outside timing. Every benchmark reports allocations and retains a result or counter.
+
+Selection uses 1,000 rules, with the match at index 0, 500, or 999. Fallback has ten consecutive action errors before success. Error workloads use 100 rules; stop visits one and continue visits all. Combinator workloads use one rule with three leaves (or equivalent nesting), count child calls, and verify short-circuit behavior.
+
+Summary and Trace use the same plain conditions at 10, 100, and 1,000 rules. These Trace numbers include per-rule timings but no nested child tree; complex combinator traces cost more. Explain benchmarks separately measure structural views and text rendering from an existing 100-rule Result with 10 matches. Lookup queries an existing 1,000-rule all-match Result.
+
+Parallel benchmarks use exactly 1, 2, 4, 8, 16, or 32 worker goroutines, one shared engine, 1,000 rules with 10% matching, and a private reset input per worker. Work is divided across workers; GOMAXPROCS stays 12. Worker startup and synchronization are timed and amortized across operations. The reported ns/op is aggregate wall time divided by completed Fire calls, not individual request latency. Counters are combined only after workers finish.
+
+## Baseline
+
+Each table names its benchmark prefix; row labels are the exact sub-benchmark suffixes. Units are nanoseconds per operation, bytes per operation, allocations per operation, and evaluated rules per second.
+
+### Construction
+
+`BenchmarkBuildEngine`
+
+| Workload | ns/op | B/op | allocs/op | evaluated/s |
+| --- | ---: | ---: | ---: | ---: |
+| `rules_10` | 435.20 | 1,056 | 9 | - |
+| `rules_100` | 5,721.00 | 8,864 | 9 | - |
+| `rules_1000` | 84,794.00 | 103,880 | 11 | - |
+| `rules_10000` | 1,239,361.00 | 928,510 | 39 | - |
+
+### Fire scale
+
+`BenchmarkFireScale`
+
+| Workload | ns/op | B/op | allocs/op | evaluated/s |
+| --- | ---: | ---: | ---: | ---: |
+| `all_miss/rules_10` | 116.80 | 0 | 0 | 85,581,054 |
+| `all_match/rules_10` | 316.40 | 744 | 5 | 31,606,544 |
+| `all_miss/rules_100` | 835.20 | 0 | 0 | 119,738,100 |
+| `all_match/rules_100` | 2,264.00 | 6,120 | 8 | 44,175,649 |
+| `ten_percent/rules_100` | 1,037.00 | 744 | 5 | 96,451,733 |
+| `all_miss/rules_1000` | 8,057.00 | 0 | 0 | 124,109,205 |
+| `all_match/rules_1000` | 23,874.00 | 77,800 | 12 | 41,886,197 |
+| `ten_percent/rules_1000` | 9,493.00 | 6,120 | 8 | 105,340,948 |
+| `all_miss/rules_10000` | 80,803.00 | 0 | 0 | 123,757,494 |
+| `all_match/rules_10000` | 212,650.00 | 1,109,992 | 19 | 47,025,609 |
+| `ten_percent/rules_10000` | 97,884.00 | 77,800 | 12 | 102,162,134 |
+
+### Selection and fallback
+
+`BenchmarkFireSelection`
+
+| Workload | ns/op | B/op | allocs/op | evaluated/s |
+| --- | ---: | ---: | ---: | ---: |
+| `first_match/start` | 63.08 | 24 | 1 | 15,852,444 |
+| `first_match/middle` | 4,079.00 | 24 | 1 | 122,829,866 |
+| `first_match/end` | 8,217.00 | 24 | 1 | 121,700,105 |
+| `first_fire/start` | 62.81 | 24 | 1 | 15,919,768 |
+| `first_fire/middle` | 4,069.00 | 24 | 1 | 123,119,508 |
+| `first_fire/end` | 8,140.00 | 24 | 1 | 122,848,945 |
+| `first_fire/action_error_fallback` | 1,096.00 | 3,384 | 26 | 10,039,361 |
+
+### Combinators
+
+`BenchmarkFireCombinators`
+
+| Workload | ns/op | B/op | allocs/op | evaluated/s |
+| --- | ---: | ---: | ---: | ---: |
+| `all_true` | 68.34 | 24 | 1 | 14,631,791 |
+| `all_short_circuit` | 55.60 | 0 | 0 | 17,986,873 |
+| `any_false` | 58.49 | 0 | 0 | 17,096,098 |
+| `any_short_circuit` | 65.69 | 24 | 1 | 15,222,602 |
+| `nested` | 73.85 | 24 | 1 | 13,540,662 |
+
+### Errors and cancellation
+
+`BenchmarkFireErrors`
+
+| Workload | ns/op | B/op | allocs/op | evaluated/s |
+| --- | ---: | ---: | ---: | ---: |
+| `condition/stop` | 111.30 | 184 | 5 | 8,982,917 |
+| `condition/continue` | 8,392.00 | 31,128 | 125 | 11,915,734 |
+| `action/stop` | 115.30 | 184 | 5 | 8,670,552 |
+| `action/continue` | 8,774.00 | 31,128 | 125 | 11,396,775 |
+| `panic_recover` | 10,791.00 | 3,320 | 8 | 92,671 |
+| `context_already_canceled` | 77.10 | 64 | 2 | - |
+
+### Summary and Trace
+
+`BenchmarkFireDiagnostics`
+
+| Workload | ns/op | B/op | allocs/op | evaluated/s |
+| --- | ---: | ---: | ---: | ---: |
+| `summary/all_miss/rules_10` | 118.60 | 0 | 0 | 84,344,472 |
+| `trace/all_miss/rules_10` | 1,126.00 | 2,656 | 22 | 8,882,406 |
+| `summary/ten_percent/rules_10` | 133.10 | 24 | 1 | 75,125,919 |
+| `trace/ten_percent/rules_10` | 1,177.00 | 2,680 | 23 | 8,498,537 |
+| `summary/all_miss/rules_100` | 841.70 | 0 | 0 | 118,801,554 |
+| `trace/all_miss/rules_100` | 10,203.00 | 25,760 | 202 | 9,801,151 |
+| `summary/ten_percent/rules_100` | 1,060.00 | 744 | 5 | 94,379,160 |
+| `trace/ten_percent/rules_100` | 10,678.00 | 26,504 | 207 | 9,364,662 |
+| `summary/all_miss/rules_1000` | 8,162.00 | 0 | 0 | 122,512,028 |
+| `trace/all_miss/rules_1000` | 95,864.00 | 258,336 | 2,002 | 10,431,480 |
+| `summary/ten_percent/rules_1000` | 9,690.00 | 6,120 | 8 | 103,202,832 |
+| `trace/ten_percent/rules_1000` | 100,233.00 | 264,457 | 2,010 | 9,976,764 |
+
+### Explain on demand
+
+`BenchmarkExplainOnDemand`
+
+| Workload | ns/op | B/op | allocs/op | evaluated/s |
+| --- | ---: | ---: | ---: | ---: |
+| `rules_100/structural` | 3,093.00 | 10,880 | 1 | - |
+| `rules_100/text` | 32,183.00 | 66,961 | 215 | - |
+
+### Result.Rule lookup
+
+`BenchmarkResultRuleLookup`
+
+| Workload | ns/op | B/op | allocs/op | evaluated/s |
+| --- | ---: | ---: | ---: | ---: |
+| `rule/0` | 32.42 | 0 | 0 | - |
+| `rule/500` | 31.09 | 0 | 0 | - |
+| `rule/999` | 31.62 | 0 | 0 | - |
+| `unknown` | 10.96 | 0 | 0 | - |
+
+### Shared Engine concurrency
+
+`BenchmarkFireParallel`
+
+| Workload | ns/op | B/op | allocs/op | evaluated/s |
+| --- | ---: | ---: | ---: | ---: |
+| `workers_1` | 9,634.00 | 6,120 | 8 | 103,800,830 |
+| `workers_2` | 5,446.00 | 6,120 | 8 | 183,635,300 |
+| `workers_4` | 3,454.00 | 6,120 | 8 | 289,509,373 |
+| `workers_8` | 2,658.00 | 6,120 | 8 | 376,232,174 |
+| `workers_16` | 2,520.00 | 6,120 | 8 | 396,892,491 |
+| `workers_32` | 2,483.00 | 6,120 | 8 | 402,819,339 |
+
+## Structural performance guarantees
+
+Ordinary no-trace all-miss Fire measured 0 B/op and 0 allocs/op at every tested scale. The allocation regression test also checks that allocation does not grow with rule count and that no per-rule outcome records are created for misses. This guarantee concerns framework execution storage; caller callbacks and contexts may allocate.
+
+Sorting, validation, normalization, and indexes belong to construction, and Trace-off execution reads no duration clock. Successful and failed outcomes retain the records required for Result/Explain correctness. Full tracing and text formatting intentionally cost more; enable tracing per execution and render explanations when needed. No hardware-specific ns/op threshold is enforced.
+
+All-match and error-heavy workloads allocate for retained outcomes and failures. A successful fallback still retains its earlier errors. Shared-engine throughput is subject to CPU count, allocator pressure, and callback behavior; these results do not promise linear scaling. Measure your own rule mix and input ownership pattern before setting a service budget.
