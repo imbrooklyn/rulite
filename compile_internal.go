@@ -9,6 +9,7 @@ type ruleMetadata struct {
 	id                RuleID
 	priority          Priority
 	registrationIndex int
+	details           *ruleDetails
 }
 
 // snapshotMetadata owns only values and indexes, never executable callbacks.
@@ -57,12 +58,12 @@ func compileRules[T any](rules []Rule[T]) (*compiledSnapshot[T], error) {
 		}
 	}
 	if len(issues) != 0 {
-		return nil, &ValidationError{issues: issues}
+		return nil, newValidationError(issues)
 	}
 
 	metadata := &snapshotMetadata{rules: make([]ruleMetadata, len(rules)), byID: byID}
 	for index, rule := range rules {
-		metadata.rules[index] = ruleMetadata{id: rule.id, priority: rule.priority, registrationIndex: index}
+		metadata.rules[index] = ruleMetadata{id: rule.id, priority: rule.priority, registrationIndex: index, details: rule.details}
 	}
 	slices.SortStableFunc(metadata.rules, func(a, b ruleMetadata) int {
 		switch {

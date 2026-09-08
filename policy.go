@@ -24,7 +24,7 @@ const (
 )
 
 // ExecutionPolicy is an immutable value. Its zero value is DefaultPolicy().
-// With methods return new values; Fire validates every supplied policy option.
+// With methods return new values; Fire and NewEngineFromRuleSet validate every supplied policy option.
 type ExecutionPolicy struct {
 	stop            StopMode
 	conditionErrors ErrorMode
@@ -71,7 +71,8 @@ const (
 	PropagatePanics
 )
 
-// FireOption is an immutable per-execution option. Its zero value is a no-op.
+// FireOption is an immutable option for Fire or NewEngineFromRuleSet defaults.
+// Its zero value is a no-op.
 // Options apply from left to right. Every nonzero option is validated when
 // reached, so a later option cannot repair an earlier invalid option.
 type FireOption struct {
@@ -89,16 +90,17 @@ const (
 	optionPanic
 )
 
-// WithPolicy replaces the entire execution policy for this Fire.
+// WithPolicy replaces the entire execution policy for Fire or an engine default.
 func WithPolicy(policy ExecutionPolicy) FireOption {
 	return FireOption{kind: optionPolicy, policy: policy}
 }
 
-// WithTrace enables complete tracing for this Fire. Repeating it is idempotent.
-// Without this option, Fire does not read a duration clock or collect trees.
+// WithTrace enables complete tracing for Fire or an engine default.
+// Repeating it is idempotent. With tracing disabled, Fire does not read a
+// duration clock or collect trees.
 func WithTrace() FireOption { return FireOption{kind: optionTrace} }
 
-// WithPanicMode selects callback panic handling for this Fire.
+// WithPanicMode selects callback panic handling for Fire or an engine default.
 func WithPanicMode(mode PanicMode) FireOption { return FireOption{kind: optionPanic, panic: mode} }
 
 type executionConfig struct {
@@ -107,8 +109,7 @@ type executionConfig struct {
 	trace  bool
 }
 
-func configureExecution(options []FireOption) (executionConfig, error) {
-	var config executionConfig
+func configureExecution(config executionConfig, options []FireOption) (executionConfig, error) {
 	for _, option := range options {
 		switch option.kind {
 		case optionNone:

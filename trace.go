@@ -57,11 +57,20 @@ func (t RuleTrace) ID() RuleID { return t.execution.ID() }
 // Order returns the zero-based compiled position.
 func (t RuleTrace) Order() int { return t.execution.Order() }
 
-// RegistrationIndex returns the original zero-based NewEngine argument position.
+// RegistrationIndex returns the original zero-based Compile or NewEngine argument position.
 func (t RuleTrace) RegistrationIndex() int { return t.execution.RegistrationIndex() }
 
 // Priority returns the compiled priority.
 func (t RuleTrace) Priority() Priority { return t.execution.Priority() }
+
+// Name returns the normalized display name from the captured metadata.
+func (t RuleTrace) Name() string { return t.execution.Name() }
+
+// Description returns the normalized description from the captured metadata.
+func (t RuleTrace) Description() string { return t.execution.Description() }
+
+// Tags returns a defensive copy of the captured normalized tags.
+func (t RuleTrace) Tags() []string { return t.execution.Tags() }
 
 // State returns the final state from the canonical ledger.
 func (t RuleTrace) State() RuleState { return t.execution.State() }

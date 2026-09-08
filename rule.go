@@ -1,6 +1,6 @@
 package rulite
 
-// RuleID is a stable rule identity, unique within an engine.
+// RuleID is a stable rule identity, unique within a compiled RuleSet.
 // It must contain 1 to 128 bytes and match:
 //
 //	^[a-z0-9][a-z0-9._/-]{0,127}$
@@ -9,18 +9,19 @@ package rulite
 type RuleID string
 
 // Priority determines rule order. Higher values come first; equal values
-// preserve the registration order passed to NewEngine.
+// preserve the registration order passed to Compile or NewEngine.
 type Priority int32
 
 // DefaultPriority is the priority assigned by NewRule.
 const DefaultPriority Priority = 0
 
-// Rule is an immutable definition containing an ID, priority, condition, and
+// Rule is an immutable definition containing an ID, priority, metadata, condition, and
 // action. Construct rules with NewRule. The zero value is invalid and is
-// rejected by NewEngine. Copying a rule does not clone callback closures.
+// rejected by Compile and NewEngine. Copying a rule does not clone callback closures.
 type Rule[T any] struct {
 	id        RuleID
 	priority  Priority
+	details   *ruleDetails
 	condition Condition[T]
 	action    Action[T]
 }
@@ -36,12 +37,13 @@ func (r Rule[T]) Priority() Priority {
 	return r.priority
 }
 
-// RuleBuilder is the immutable stage for selecting a priority and condition.
+// RuleBuilder is the immutable stage for selecting metadata, priority, and condition.
 // Its methods return new values, so a builder can be reused independently.
 // Use NewRule to assign an ID; the zero value has an invalid, empty ID.
 type RuleBuilder[T any] struct {
 	id       RuleID
 	priority Priority
+	details  *ruleDetails
 }
 
 // ActionBuilder is the immutable stage for supplying a rule's action after
@@ -50,12 +52,13 @@ type RuleBuilder[T any] struct {
 type ActionBuilder[T any] struct {
 	id        RuleID
 	priority  Priority
+	details   *ruleDetails
 	condition Condition[T]
 }
 
 // NewRule starts a rule definition with id and DefaultPriority.
 // T should be a non-pointer business state type; callbacks receive *T.
-// Validation is deferred to NewEngine, so an invalid ID does not panic here.
+// Validation is deferred to Compile or NewEngine, so an invalid ID does not panic here.
 func NewRule[T any](id RuleID) RuleBuilder[T] {
 	return RuleBuilder[T]{id: id, priority: DefaultPriority}
 }
@@ -68,13 +71,13 @@ func (b RuleBuilder[T]) Priority(priority Priority) RuleBuilder[T] {
 }
 
 // When returns the action stage with condition, leaving b unchanged.
-// A nil condition is accepted here and rejected by NewEngine.
+// A nil condition is accepted here and rejected by Compile or NewEngine.
 func (b RuleBuilder[T]) When(condition Condition[T]) ActionBuilder[T] {
-	return ActionBuilder[T]{id: b.id, priority: b.priority, condition: condition}
+	return ActionBuilder[T]{id: b.id, priority: b.priority, details: b.details, condition: condition}
 }
 
 // Then returns a completed rule with action, leaving b unchanged.
-// A nil action is accepted here and rejected by NewEngine.
+// A nil action is accepted here and rejected by Compile or NewEngine.
 func (b ActionBuilder[T]) Then(action Action[T]) Rule[T] {
-	return Rule[T]{id: b.id, priority: b.priority, condition: b.condition, action: action}
+	return Rule[T]{id: b.id, priority: b.priority, details: b.details, condition: b.condition, action: action}
 }

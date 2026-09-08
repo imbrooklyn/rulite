@@ -3,6 +3,7 @@ package rulite_test
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -23,7 +24,36 @@ func validationIssues(t *testing.T, rules ...rulite.Rule[pricingState]) (*rulite
 	if !errors.As(err, &validation) {
 		t.Fatalf("error type = %T; want *ValidationError", err)
 	}
+	set, compileErr := rulite.Compile(rules...)
+	var compiledValidation *rulite.ValidationError
+	if set != nil || !errors.As(compileErr, &compiledValidation) || !reflect.DeepEqual(compiledValidation, validation) || compileErr.Error() != err.Error() {
+		t.Fatal("Compile and NewEngine returned different validation issues")
+	}
 	return validation, validation.Issues()
+}
+
+func TestValidationIndex(t *testing.T) {
+	validation, all := validationIssues(t, validRule("a"), validRule("b"), rulite.NewRule[pricingState]("a").When(nil).Then(nil), validRule("b"), rulite.Rule[pricingState]{})
+	for _, id := range []rulite.RuleID{"a", "b", "missing", "", "INVALID"} {
+		var want []rulite.ValidationIssue
+		for _, issue := range all {
+			if issueID, ok := issue.RuleID(); ok && issueID == id {
+				want = append(want, issue)
+			}
+		}
+		if !reflect.DeepEqual(validation.IssuesForRule(id), want) {
+			t.Fatalf("incorrect indexed issues for %q", id)
+		}
+		clear(validation.IssuesForRule(id))
+		if !reflect.DeepEqual(validation.IssuesForRule(id), want) {
+			t.Fatal("indexed issues expose mutable storage")
+		}
+	}
+	for _, empty := range []*rulite.ValidationError{nil, {}} {
+		if len(empty.IssuesForRule("a")) != 0 {
+			t.Fatal("zero error has indexed issues")
+		}
+	}
 }
 
 func TestRuleIDValidation(t *testing.T) {

@@ -1,9 +1,12 @@
-// Package rulite defines type-safe business rules and immutable engines.
+// Package rulite defines type-safe business rules, immutable rule sets and engines.
 //
 // Build a rule with NewRule, optionally set its priority, supply a Condition
 // with When, and supply an Action with Then. NewEngine validates the rules
 // and freezes their order: higher priorities first, with registration order
 // breaking ties.
+// Compile exposes the same validated snapshot as a reusable RuleSet.
+// NewEngineFromRuleSet shares that snapshot with independent engine defaults.
+// Names, descriptions, and tags are descriptive metadata; RuleID alone is identity.
 //
 // Engine.Fire visits each condition and, when matched, its action sequentially.
 // Earlier action mutations are visible to later conditions. The default policy

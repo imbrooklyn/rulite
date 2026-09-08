@@ -7,6 +7,8 @@ import (
 )
 
 var (
+	// ErrInvalidRuleSet identifies a nil or uninitialized RuleSet.
+	ErrInvalidRuleSet = errors.New("rulite: invalid rule set")
 	// ErrInvalidRule identifies an invalid rule ID or a nil action.
 	ErrInvalidRule = errors.New("rulite: invalid rule")
 	// ErrDuplicateRuleID identifies a repeated, syntactically valid rule ID.
@@ -66,9 +68,36 @@ func (i ValidationIssue) Cause() error {
 // order. Each rule contributes issues in this order: ID syntax, duplicate
 // valid ID, nil condition, nil action. Only the second and later occurrences
 // of a valid ID are duplicates. Invalid IDs do not participate in that check.
-// NewEngine returns a *ValidationError whenever validation fails.
+// Compile and NewEngine return a *ValidationError whenever rule validation fails.
 type ValidationError struct {
 	issues []ValidationIssue
+	byID   map[RuleID][]int
+}
+
+func newValidationError(issues []ValidationIssue) *ValidationError {
+	e := &ValidationError{issues: issues, byID: make(map[RuleID][]int)}
+	for index, issue := range issues {
+		if id, ok := issue.RuleID(); ok {
+			e.byID[id] = append(e.byID[id], index)
+		}
+	}
+	return e
+}
+
+// IssuesForRule returns a defensive copy of issues for an exact, valid RuleID
+// in validation order, using an index built during compilation. Unknown IDs,
+// invalid IDs, and nil or zero errors return an empty collection, which may be
+// nil. Issues without a valid ID remain available through Issues and Unwrap.
+func (e *ValidationError) IssuesForRule(id RuleID) []ValidationIssue {
+	if e == nil || len(e.byID[id]) == 0 {
+		return nil
+	}
+	indexes := e.byID[id]
+	issues := make([]ValidationIssue, len(indexes))
+	for index, position := range indexes {
+		issues[index] = e.issues[position]
+	}
+	return issues
 }
 
 // Error describes all issues in validation order.

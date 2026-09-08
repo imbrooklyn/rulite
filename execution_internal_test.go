@@ -17,17 +17,27 @@ func TestSparseAllMissAllocation(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		var input int
-		var result Result
-		allocations := testing.AllocsPerRun(20, func() { result, err = engine.Fire(context.Background(), &input) })
-		if err != nil || result.counts.Unmatched != size || len(result.records) != 0 || result.trace != nil || result.metadata != engine.snapshot.metadata {
-			t.Fatal("all-miss execution is not sparse")
+		set, err := Compile(rules...)
+		if err != nil {
+			t.Fatal(err)
 		}
-		if size > 1 && allocations > previous {
-			t.Fatalf("all-miss allocation grows with rules: %v > %v", allocations, previous)
+		reused, err := NewEngineFromRuleSet(set)
+		if err != nil {
+			t.Fatal(err)
 		}
-		t.Logf("rules=%d allocations=%g", size, allocations)
-		previous = allocations
+		for path, engine := range []*Engine[int]{engine, reused} {
+			var input int
+			var result Result
+			allocations := testing.AllocsPerRun(20, func() { result, err = engine.Fire(context.Background(), &input) })
+			if err != nil || result.counts.Unmatched != size || len(result.records) != 0 || result.trace != nil || result.metadata != engine.snapshot.metadata {
+				t.Fatal("all-miss execution is not sparse")
+			}
+			if allocations != 0 || size > 1 && allocations > previous {
+				t.Fatalf("all-miss execution allocated: %v", allocations)
+			}
+			t.Logf("rules=%d path=%d allocations=%g", size, path, allocations)
+			previous = allocations
+		}
 	}
 }
 

@@ -1,6 +1,6 @@
 # Roadmap
 
-Rulite v0.1 is a typed, deterministic, single-pass business rules engine. Later versions below describe planned scope, not currently available APIs or release dates.
+Rulite is a typed, deterministic, single-pass business rules engine. The v0.1 core and v0.2 RuleSet/Compile, metadata, reusable engine construction, and indexed validation queries are implemented. Observer/events, benchmark regression automation, and the internal CEL study remain planned v0.2 scope. The table describes version goals, not release dates or a claim that every goal is available.
 
 | Version | Goals | Explicit boundaries |
 | --- | --- | --- |

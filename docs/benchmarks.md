@@ -1,6 +1,6 @@
 # Benchmarks
 
-These measurements describe the v0.1 workloads in [benchmark_test.go](../benchmark_test.go). They are a reproducible machine baseline, not a latency SLA or a prediction for business callbacks, network providers, or other hardware.
+These measurements retain the v0.1 workloads in [benchmark_test.go](../benchmark_test.go) and add RuleSet/metadata measurements from [compile_benchmark_test.go](../compile_benchmark_test.go). They are reproducible machine baselines, not a latency SLA or a prediction for business callbacks, network providers, or other hardware.
 
 ## Environment and reproduction
 
@@ -31,7 +31,7 @@ Summary and Trace use the same plain conditions at 10, 100, and 1,000 rules. The
 
 Parallel benchmarks use exactly 1, 2, 4, 8, 16, or 32 worker goroutines, one shared engine, 1,000 rules with 10% matching, and a private reset input per worker. Work is divided across workers; GOMAXPROCS stays 12. Worker startup and synchronization are timed and amortized across operations. The reported ns/op is aggregate wall time divided by completed Fire calls, not individual request latency. Counters are combined only after workers finish.
 
-## Baseline
+## v0.1 baseline
 
 Each table names its benchmark prefix; row labels are the exact sub-benchmark suffixes. Units are nanoseconds per operation, bytes per operation, allocations per operation, and evaluated rules per second.
 
@@ -154,6 +154,54 @@ Each table names its benchmark prefix; row labels are the exact sub-benchmark su
 | `workers_8` | 2,658.00 | 6,120 | 8 | 376,232,174 |
 | `workers_16` | 2,520.00 | 6,120 | 8 | 396,892,491 |
 | `workers_32` | 2,483.00 | 6,120 | 8 | 402,819,339 |
+
+## RuleSet and metadata measurements
+
+Measured on 2026-09-08 with the same Apple M4 Pro, Go 1.27.0, macOS 26.5.2, darwin/arm64, and GOMAXPROCS 12 described above. The full suite ran 72 workloads, three samples each, using the reproduction command above. The following tables report medians; the v0.1 tables remain historical comparison points.
+
+Compile prepares mixed priorities, names, descriptions, and two normalized tags per rule outside timing, then times validation, sorting, snapshot ownership, and index construction. Metadata normalization belongs to builder timing and is excluded here. Reusable engine construction starts from a compiled set and supplies a first-fire default; no executable nodes are copied. Counts and ledger checks run after construction timing, using fresh input. Lookup uses 1,000 rules; validation lookup selects two issues from an aggregate of 2,000. Tag and issue lookups include defensive-copy costs. Each benchmark uses `ReportAllocs`, an output sink, and correctness assertions.
+
+### Construction
+
+| Benchmark | ns/op | B/op | allocs/op |
+| --- | ---: | ---: | ---: |
+| `BenchmarkBuildEngine/rules_10` | 518.900 | 1,168 | 10 |
+| `BenchmarkBuildEngine/rules_100` | 7,502.000 | 9,520 | 10 |
+| `BenchmarkBuildEngine/rules_1000` | 118,388.000 | 112,088 | 12 |
+| `BenchmarkBuildEngine/rules_10000` | 1,838,138.000 | 1,002,248 | 40 |
+| `BenchmarkCompile/rules_10` | 668.200 | 1,152 | 9 |
+| `BenchmarkCompile/rules_100` | 8,914.000 | 9,504 | 9 |
+| `BenchmarkCompile/rules_1000` | 130,411.000 | 112,072 | 11 |
+| `BenchmarkCompile/rules_10000` | 1,672,652.000 | 1,002,232 | 39 |
+| `BenchmarkNewEngineFromRuleSet/rules_10` | 8.695 | 16 | 1 |
+| `BenchmarkNewEngineFromRuleSet/rules_100` | 8.579 | 16 | 1 |
+| `BenchmarkNewEngineFromRuleSet/rules_1000` | 8.584 | 16 | 1 |
+| `BenchmarkNewEngineFromRuleSet/rules_10000` | 8.485 | 16 | 1 |
+
+Full construction is more expensive than the historical v0.1 measurements, with larger metadata storage and one additional allocation for the convenience path. The short samples do not isolate every source of timing differences. Construction from an existing RuleSet uses one 16-byte allocation at every tested size; compile once when several engines need the same rules. BuildEngine and Compile use different callback and metadata fixtures, so their timing difference is not a measurement of constructor overhead alone.
+
+### Metadata and validation lookup
+
+| Benchmark | ns/op | B/op | allocs/op |
+| --- | ---: | ---: | ---: |
+| `BenchmarkRuleSetLookup/rule/0` | 14.750 | 0 | 0 |
+| `BenchmarkRuleSetLookup/rule/500` | 14.790 | 0 | 0 |
+| `BenchmarkRuleSetLookup/rule/999` | 14.790 | 0 | 0 |
+| `BenchmarkRuleSetLookup/unknown` | 4.947 | 0 | 0 |
+| `BenchmarkRuleSetLookup/tags_copy` | 16.780 | 32 | 1 |
+| `BenchmarkValidationLookup/rule/500` | 29.930 | 80 | 1 |
+| `BenchmarkValidationLookup/unknown` | 4.668 | 0 | 0 |
+
+### Fire all-miss comparison
+
+| Benchmark | ns/op | B/op | allocs/op |
+| --- | ---: | ---: | ---: |
+| `BenchmarkFireScale/all_miss/rules_10` | 118.300 | 0 | 0 |
+| `BenchmarkFireScale/all_miss/rules_100` | 844.400 | 0 | 0 |
+| `BenchmarkFireScale/all_miss/rules_1000` | 8,139.000 | 0 | 0 |
+| `BenchmarkFireScale/all_miss/rules_10000` | 82,470.000 | 0 | 0 |
+
+The allocation test checks both construction paths at 1, 100, and 10,000 rules: no outcome records for misses, no trace storage, and zero allocations with the test callbacks. The existing Fire scale, selection, error, Trace, Explain, and concurrent workloads remain in the suite.
 
 ## Structural performance guarantees
 

@@ -250,11 +250,20 @@ func (x RuleExecution) ID() RuleID { return x.metadata.id }
 // Order returns the zero-based compiled position.
 func (x RuleExecution) Order() int { return x.order }
 
-// RegistrationIndex returns the original zero-based NewEngine argument position.
+// RegistrationIndex returns the original zero-based Compile or NewEngine argument position.
 func (x RuleExecution) RegistrationIndex() int { return x.metadata.registrationIndex }
 
 // Priority returns the compiled priority.
 func (x RuleExecution) Priority() Priority { return x.metadata.priority }
+
+// Name returns the normalized display name from the captured metadata.
+func (x RuleExecution) Name() string { return x.metadata.details.value().name }
+
+// Description returns the normalized description from the captured metadata.
+func (x RuleExecution) Description() string { return x.metadata.details.value().description }
+
+// Tags returns a defensive copy of the captured normalized tags.
+func (x RuleExecution) Tags() []string { return slices.Clone(x.metadata.details.value().tags) }
 
 // State returns the final execution state.
 func (x RuleExecution) State() RuleState { return x.state }
