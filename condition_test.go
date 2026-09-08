@@ -65,8 +65,8 @@ func TestConditionCombinators(t *testing.T) {
 					if len(calls) >= len(tc.calls) || index != tc.calls[len(calls)] {
 						t.Fatalf("unexpected child %d called after %v", index, calls)
 					}
-					if gotContext != ctx || gotInput != input {
-						t.Fatal("combinator changed the context or input")
+					if gotContext.Done() != ctx.Done() || gotContext.Err() != ctx.Err() || gotInput != input {
+						t.Fatal("combinator changed context semantics or input")
 					}
 					calls = append(calls, index)
 					return result.matched, result.err
@@ -115,8 +115,8 @@ func TestNot(t *testing.T) {
 			var child rulite.Condition[pricingState]
 			if !tc.nilChild {
 				child = func(gotContext context.Context, gotInput *pricingState) (bool, error) {
-					if gotContext != ctx || gotInput != input {
-						t.Fatal("Not changed the context or input")
+					if gotContext.Done() != ctx.Done() || gotContext.Err() != ctx.Err() || gotInput != input {
+						t.Fatal("Not changed context semantics or input")
 					}
 					calls++
 					return tc.matched, tc.err

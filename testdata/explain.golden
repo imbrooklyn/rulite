@@ -1,0 +1,137 @@
+=== not_started ===
+execution: not-started
+stop reason: none
+
+=== completed ===
+execution: completed
+summary: total=2 evaluated=2 not-evaluated=0 matched=1 unmatched=1 fired=1 skipped=0 failed=0 condition-failed=0 action-failed=0 panic-recovered=0
+
+rule success order=0 registration-index=0 priority=0
+  evaluated=true matched=true action-started=true action-success=true state=fired
+
+rule miss order=1 registration-index=1 priority=0
+  evaluated=true matched=false action-started=false action-success=false state=unmatched
+
+=== completed_with_failure ===
+execution: completed
+summary: total=2 evaluated=2 not-evaluated=0 matched=1 unmatched=0 fired=1 skipped=0 failed=1 condition-failed=1 action-failed=0 panic-recovered=0
+
+rule condition-failure order=0 registration-index=0 priority=0
+  evaluated=true matched=false action-started=false action-success=false state=failed
+  failure: rule "condition-failure" condition failed: provider unavailable; continued=true
+
+rule success order=1 registration-index=1 priority=0
+  evaluated=true matched=true action-started=true action-success=true state=fired
+
+=== first_match ===
+execution: first-match
+summary: total=2 evaluated=1 not-evaluated=1 matched=1 unmatched=0 fired=0 skipped=0 failed=1 condition-failed=0 action-failed=1 panic-recovered=0
+
+rule failure order=0 registration-index=0 priority=0
+  evaluated=true matched=true action-started=true action-success=false state=failed
+  failure: rule "failure" action failed: provider unavailable; continued=true
+
+rule unreached order=1 registration-index=1 priority=0
+  evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+  not-evaluated reason: execution-stopped
+
+=== first_fire ===
+execution: first-fire
+summary: total=3 evaluated=2 not-evaluated=1 matched=2 unmatched=0 fired=1 skipped=0 failed=1 condition-failed=0 action-failed=1 panic-recovered=0
+
+rule failure order=0 registration-index=0 priority=0
+  evaluated=true matched=true action-started=true action-success=false state=failed
+  failure: rule "failure" action failed: provider unavailable; continued=true
+
+rule success order=1 registration-index=1 priority=0
+  evaluated=true matched=true action-started=true action-success=true state=fired
+
+rule unreached order=2 registration-index=2 priority=0
+  evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+  not-evaluated reason: execution-stopped
+
+=== condition_error ===
+execution: condition-error
+summary: total=2 evaluated=1 not-evaluated=1 matched=0 unmatched=0 fired=0 skipped=0 failed=1 condition-failed=1 action-failed=0 panic-recovered=0
+
+rule condition-failure order=0 registration-index=0 priority=0
+  evaluated=true matched=false action-started=false action-success=false state=failed
+  failure: rule "condition-failure" condition failed: provider unavailable; continued=false
+
+rule unreached order=1 registration-index=1 priority=0
+  evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+  not-evaluated reason: execution-stopped
+
+=== action_error ===
+execution: action-error
+summary: total=2 evaluated=1 not-evaluated=1 matched=1 unmatched=0 fired=0 skipped=0 failed=1 condition-failed=0 action-failed=1 panic-recovered=0
+
+rule failure order=0 registration-index=0 priority=0
+  evaluated=true matched=true action-started=true action-success=false state=failed
+  failure: rule "failure" action failed: provider unavailable; continued=false
+
+rule unreached order=1 registration-index=1 priority=0
+  evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+  not-evaluated reason: execution-stopped
+
+=== context_skipped ===
+execution: context-canceled
+summary: total=5 evaluated=4 not-evaluated=1 matched=3 unmatched=1 fired=1 skipped=1 failed=1 condition-failed=0 action-failed=1 panic-recovered=0
+
+rule success order=0 registration-index=0 priority=0
+  evaluated=true matched=true action-started=true action-success=true state=fired
+
+rule failure order=1 registration-index=1 priority=0
+  evaluated=true matched=true action-started=true action-success=false state=failed
+  failure: rule "failure" action failed: provider unavailable; continued=true
+
+rule miss order=2 registration-index=2 priority=0
+  evaluated=true matched=false action-started=false action-success=false state=unmatched
+
+rule skip order=3 registration-index=3 priority=0
+  evaluated=true matched=true action-started=false action-success=false state=skipped
+  skip reason: context-done
+
+rule unreached order=4 registration-index=4 priority=0
+  evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+  not-evaluated reason: execution-stopped
+
+=== context_before_condition ===
+execution: context-canceled
+summary: total=1 evaluated=0 not-evaluated=1 matched=0 unmatched=0 fired=0 skipped=0 failed=0 condition-failed=0 action-failed=0 panic-recovered=0
+
+rule unreached order=0 registration-index=0 priority=0
+  evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+  not-evaluated reason: execution-stopped
+
+=== deadline ===
+execution: context-deadline-exceeded
+summary: total=1 evaluated=0 not-evaluated=1 matched=0 unmatched=0 fired=0 skipped=0 failed=0 condition-failed=0 action-failed=0 panic-recovered=0
+
+rule unreached order=0 registration-index=0 priority=0
+  evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+  not-evaluated reason: execution-stopped
+
+=== condition_panic ===
+execution: panic
+summary: total=2 evaluated=1 not-evaluated=1 matched=0 unmatched=0 fired=0 skipped=0 failed=1 condition-failed=1 action-failed=0 panic-recovered=1
+
+rule condition-panic order=0 registration-index=0 priority=0
+  evaluated=true matched=false action-started=false action-success=false state=failed
+  failure: rule "condition-panic" condition failed: rulite: rule "condition-panic" condition panic (string); continued=false
+
+rule unreached order=1 registration-index=1 priority=0
+  evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+  not-evaluated reason: execution-stopped
+
+=== action_panic ===
+execution: panic
+summary: total=2 evaluated=1 not-evaluated=1 matched=1 unmatched=0 fired=0 skipped=0 failed=1 condition-failed=0 action-failed=1 panic-recovered=1
+
+rule action-panic order=0 registration-index=0 priority=0
+  evaluated=true matched=true action-started=true action-success=false state=failed
+  failure: rule "action-panic" action failed: rulite: rule "action-panic" action panic (string); continued=false
+
+rule unreached order=1 registration-index=1 priority=0
+  evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+  not-evaluated reason: execution-stopped

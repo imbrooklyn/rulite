@@ -9,6 +9,8 @@ import (
 // T should be a non-pointer business state type. Conditions must not mutate
 // the state. A non-nil error means evaluation failed, and the boolean result
 // is ignored. Callers must synchronize shared callback captures.
+// WithTrace supplies a derived context preserving values, deadline, Done, Err,
+// and Cause. Context object identity is not part of the callback contract.
 type Condition[T any] func(context.Context, *T) (bool, error)
 
 // All returns a condition that evaluates children from left to right and stops
@@ -21,6 +23,9 @@ type Condition[T any] func(context.Context, *T) (bool, error)
 func All[T any](conditions ...Condition[T]) Condition[T] {
 	children := slices.Clone(conditions)
 	return func(ctx context.Context, input *T) (bool, error) {
+		if recorder := recorderFrom(ctx); recorder != nil {
+			return traceCombined(ctx, input, recorder, ConditionAll, children)
+		}
 		for _, child := range children {
 			if child == nil {
 				return false, ErrInvalidCondition
@@ -47,6 +52,9 @@ func All[T any](conditions ...Condition[T]) Condition[T] {
 func Any[T any](conditions ...Condition[T]) Condition[T] {
 	children := slices.Clone(conditions)
 	return func(ctx context.Context, input *T) (bool, error) {
+		if recorder := recorderFrom(ctx); recorder != nil {
+			return traceCombined(ctx, input, recorder, ConditionAny, children)
+		}
 		for _, child := range children {
 			if child == nil {
 				return false, ErrInvalidCondition
@@ -69,6 +77,9 @@ func Any[T any](conditions ...Condition[T]) Condition[T] {
 // when the returned condition is called.
 func Not[T any](condition Condition[T]) Condition[T] {
 	return func(ctx context.Context, input *T) (bool, error) {
+		if recorder := recorderFrom(ctx); recorder != nil {
+			return traceCombined(ctx, input, recorder, ConditionNot, []Condition[T]{condition})
+		}
 		if condition == nil {
 			return false, ErrInvalidCondition
 		}
