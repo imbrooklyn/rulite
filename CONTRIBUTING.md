@@ -16,7 +16,7 @@ go test -race ./...
 Run each fuzz target independently for a short smoke check; increase the duration when changing its semantics:
 
 ```sh
-for target in FuzzCompileMetadata FuzzRuleValidation FuzzExecutionOutcomes FuzzCombinatorNesting FuzzExecutionErrorTree; do
+for target in FuzzCompileMetadata FuzzRuleValidation FuzzExecutionOutcomes FuzzCombinatorNesting FuzzExecutionErrorTree FuzzObservationStream; do
     go test -run '^$' -fuzz "^${target}$" -fuzztime=5s -parallel=2 || exit 1
 done
 ```

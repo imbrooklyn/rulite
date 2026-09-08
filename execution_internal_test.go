@@ -29,7 +29,7 @@ func TestSparseAllMissAllocation(t *testing.T) {
 			var input int
 			var result Result
 			allocations := testing.AllocsPerRun(20, func() { result, err = engine.Fire(context.Background(), &input) })
-			if err != nil || result.counts.Unmatched != size || len(result.records) != 0 || result.trace != nil || result.metadata != engine.snapshot.metadata {
+			if err != nil || result.counts.Unmatched != size || len(result.records) != 0 || result.trace != nil || result.diagnostics != nil || result.metadata != engine.snapshot.metadata {
 				t.Fatal("all-miss execution is not sparse")
 			}
 			if allocations != 0 || size > 1 && allocations > previous {

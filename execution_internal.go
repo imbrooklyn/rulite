@@ -7,20 +7,23 @@ import (
 )
 
 type execution struct {
-	result Result
-	causes []error
+	result    Result
+	causes    []error
+	observer  Observer
+	panicMode PanicMode
 }
 
 func execute[T any](ctx context.Context, input *T, snapshot *compiledSnapshot[T], config executionConfig) (Result, error) {
-	x := execution{result: Result{metadata: snapshot.metadata}}
+	x := execution{result: Result{metadata: snapshot.metadata}, observer: config.observer, panicMode: config.panic}
 	x.result.counts.Total = len(snapshot.metadata.rules)
 	var start time.Time
 	if config.trace {
 		start = time.Now()
 		x.result.trace = &traceData{rules: make([]ruleTiming, x.result.counts.Total)}
 	}
+	x.observeSummary(ctx, EventExecutionStarted)
 	if x.contextDone(ctx) {
-		return x.finish(start)
+		return x.finish(ctx, start)
 	}
 
 	conditionCtx := ctx
@@ -30,7 +33,7 @@ func execute[T any](ctx context.Context, input *T, snapshot *compiledSnapshot[T]
 	}
 	for order, callbacks := range snapshot.callbacks {
 		if x.contextDone(ctx) {
-			return x.finish(start)
+			return x.finish(ctx, start)
 		}
 		id := snapshot.metadata.rules[order].id
 		var node *conditionRecording
@@ -58,34 +61,39 @@ func execute[T any](ctx context.Context, input *T, snapshot *compiledSnapshot[T]
 		if panicErr != nil {
 			x.fail(order, ConditionPhase, panicErr, false, true)
 			x.result.stop = StopPanic
+			x.observeRule(ctx, EventRuleFailed, order, ConditionOutcomeError)
 			x.contextDone(ctx)
-			return x.finish(start)
+			return x.finish(ctx, start)
 		}
 		if err != nil {
 			x.fail(order, ConditionPhase, err, config.policy.conditionErrors == ContinueOnError, false)
+			x.observeRule(ctx, EventRuleFailed, order, ConditionOutcomeError)
 			if x.contextDone(ctx) {
-				return x.finish(start)
+				return x.finish(ctx, start)
 			}
 			if config.policy.conditionErrors == StopOnError {
 				x.result.stop = StopConditionError
-				return x.finish(start)
+				return x.finish(ctx, start)
 			}
 			continue
 		}
 		if !matched {
 			x.result.counts.Unmatched++
+			x.observeRule(ctx, EventRuleEvaluated, order, ConditionOutcomeFalse)
 			if x.contextDone(ctx) {
-				return x.finish(start)
+				return x.finish(ctx, start)
 			}
 			continue
 		}
 
+		x.observeRule(ctx, EventRuleEvaluated, order, ConditionOutcomeTrue)
+		x.observeRule(ctx, EventRuleMatched, order, ConditionOutcomeTrue)
 		// A successful match is preserved even when its action cannot start.
 		if x.contextDone(ctx) {
 			x.record(order, RuleSkipped)
 			x.result.counts.Matched++
 			x.result.counts.Skipped++
-			return x.finish(start)
+			return x.finish(ctx, start)
 		}
 		var actionStart time.Time
 		if config.trace {
@@ -98,34 +106,37 @@ func execute[T any](ctx context.Context, input *T, snapshot *compiledSnapshot[T]
 		if panicErr != nil {
 			x.fail(order, ActionPhase, panicErr, false, true)
 			x.result.stop = StopPanic
+			x.observeRule(ctx, EventRuleFailed, order, ConditionOutcomeNotEvaluated)
 			x.contextDone(ctx)
-			return x.finish(start)
+			return x.finish(ctx, start)
 		}
 		if err != nil {
 			x.fail(order, ActionPhase, err, config.policy.actionErrors == ContinueOnError, false)
+			x.observeRule(ctx, EventRuleFailed, order, ConditionOutcomeNotEvaluated)
 		} else {
 			x.record(order, RuleFired)
 			x.result.counts.Matched++
 			x.result.counts.Fired++
+			x.observeRule(ctx, EventRuleFired, order, ConditionOutcomeNotEvaluated)
 		}
 		if x.contextDone(ctx) {
-			return x.finish(start)
+			return x.finish(ctx, start)
 		}
 		if err != nil && config.policy.actionErrors == StopOnError {
 			x.result.stop = StopActionError
-			return x.finish(start)
+			return x.finish(ctx, start)
 		}
 		if config.policy.stop == StopOnFirstMatch {
 			x.result.stop = StopFirstMatch
-			return x.finish(start)
+			return x.finish(ctx, start)
 		}
 		if err == nil && config.policy.stop == StopOnFirstFire {
 			x.result.stop = StopFirstFire
-			return x.finish(start)
+			return x.finish(ctx, start)
 		}
 	}
 	x.result.stop = StopCompleted
-	return x.finish(start)
+	return x.finish(ctx, start)
 }
 
 func (x *execution) record(order int, state RuleState) {
@@ -169,8 +180,9 @@ func (x *execution) contextDone(ctx context.Context) bool {
 	return true
 }
 
-func (x *execution) finish(start time.Time) (Result, error) {
+func (x *execution) finish(ctx context.Context, start time.Time) (Result, error) {
 	x.result.counts.NotEvaluated = x.result.counts.Total - x.result.counts.Evaluated
+	x.observeSummary(ctx, EventExecutionFinished)
 	if x.result.trace != nil {
 		x.result.trace.duration = time.Since(start)
 	}

@@ -35,6 +35,7 @@ func (t Trace) Rules() []RuleTrace {
 }
 
 // Duration returns elapsed execution time measured with Go's monotonic clock.
+// It includes synchronous observer delivery, including the finish event.
 func (t Trace) Duration() time.Duration {
 	if t.result.trace == nil {
 		return 0
@@ -97,9 +98,11 @@ func (t RuleTrace) SkipReason() SkipReason { return t.execution.SkipReason() }
 func (t RuleTrace) NotEvaluatedReason() NotEvaluatedReason { return t.execution.NotEvaluatedReason() }
 
 // ConditionDuration returns elapsed condition time, or zero if not evaluated.
+// It excludes observer delivery for this execution's events.
 func (t RuleTrace) ConditionDuration() time.Duration { return t.timing.condition }
 
 // ActionDuration returns elapsed action time, or zero if the action did not start.
+// It excludes observer delivery for this execution's events.
 func (t RuleTrace) ActionDuration() time.Duration { return t.timing.action }
 
 // ConditionTree returns the observed built-in combinator tree, if available.

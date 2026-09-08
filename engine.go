@@ -4,8 +4,8 @@ import "context"
 
 // Engine holds an immutable, validated snapshot of typed rules.
 // Construct it with NewEngine or NewEngineFromRuleSet; its zero value is invalid.
-// An engine has no mutable configuration. Callback closures are retained by reference, and
-// callers remain responsible for synchronizing any shared captured state.
+// An engine has no mutable configuration. Callback closures and observers are retained
+// by reference; callers must synchronize their shared mutable state.
 // An engine supports concurrent Fire calls with independently owned inputs.
 type Engine[T any] struct {
 	snapshot *compiledSnapshot[T]
@@ -43,11 +43,12 @@ func NewEngine[T any](rules ...Rule[T]) (*Engine[T], error) {
 // same FireOption values and left-to-right validation as Fire; invalid options
 // return nil and ErrInvalidPolicy or ErrInvalidPanicMode. The option slice is
 // not retained. With no options, defaults are EvaluateAll, StopOnError for both
-// phases, RecoverPanics, and tracing disabled.
+// phases, RecoverPanics, tracing disabled, and no observer.
 //
 // Fire applies its options to a value copy of these defaults. WithPolicy and
 // WithPanicMode replace their values; WithTrace enables tracing, including as
 // an engine default. There is no per-call option to disable an enabled trace.
+// WithObserver replaces the observer, and WithObserver(nil) disables it.
 func NewEngineFromRuleSet[T any](set *RuleSet[T], options ...FireOption) (*Engine[T], error) {
 	if !set.Valid() {
 		return nil, ErrInvalidRuleSet
@@ -67,7 +68,7 @@ func NewEngineFromRuleSet[T any](set *RuleSet[T], options ...FireOption) (*Engin
 //
 // Preflight checks nil context, nil input, invalid engine, then options, in
 // that order. Failure returns a direct sentinel and zero Result. Once started,
-// any observed error returns *ExecutionError alongside the partial Result,
+// any business execution error returns *ExecutionError alongside the partial Result,
 // even if ContinueOnError eventually reaches StopCompleted.
 // Options apply to a value copy of the engine's defaults and affect only this call.
 //
@@ -77,9 +78,12 @@ func NewEngineFromRuleSet[T any](set *RuleSet[T], options ...FireOption) (*Engin
 // is observed afterward. Actions receive the caller's original context;
 // traced conditions receive derived contexts preserving its context semantics.
 //
-// Panics are recovered with a stack and terminate execution by default.
+// Business panics are recovered with a stack and terminate execution by default.
 // PropagatePanics preserves the panic and makes no promise to return a Result.
-// Concurrent calls must synchronize shared input or callback captures.
+// Observer errors and recovered observer panics only append a Diagnostic and
+// disable observation for this execution. Delivery is synchronous, using the
+// caller's context. Cancellation is still observed at ordinary boundaries.
+// Concurrent calls must synchronize shared input, callback captures, or observers.
 func (e *Engine[T]) Fire(ctx context.Context, input *T, options ...FireOption) (Result, error) {
 	if ctx == nil {
 		return Result{}, ErrNilContext

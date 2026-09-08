@@ -74,7 +74,7 @@ result, err := engine.Fire(ctx, &input, rulite.WithPolicy(policy))
 
 `result.Explain()` is always available. `result.Rule(id)` exposes one rule's outcome, order, and skip or non-evaluation reason. Add `rulite.WithTrace()` to `Fire` for timings and built-in combinator child outcomes. Text explanations are for people; use structured accessors for integration.
 
-Panics are recovered and terminal by default. Context cancellation is checked at callback boundaries; callbacks must cooperate to return promptly. Engine and completed Result values support concurrent use. Each Fire needs independently owned input, or caller synchronization around the entire execution. Callers also synchronize shared callback captures and treat returned error objects and panic payloads as read-only.
+Business panics are recovered and terminal by default. Context cancellation is checked at callback boundaries; callbacks must cooperate to return promptly. Engine and completed Result values support concurrent use. Each Fire needs independently owned input, or caller synchronization around the entire execution. Callers also synchronize shared callback captures and treat returned error objects and panic payloads as read-only.
 
 ## Reusable rule sets
 
@@ -91,6 +91,12 @@ if err != nil { panic(err) }
 Both construction paths produce identical validation issues, priority order, registration indexes, and execution results with the same options. Each engine has independent defaults; per-call `Fire` options apply to a copy. Reusing a set does not repeat rule validation or sorting. `Compile[T]()` creates a valid empty set; nil and zero sets are rejected by the engine constructor.
 
 Before `When`, optionally add `Name`, `Description`, or `Tags` to the builder. Names and descriptions have surrounding whitespace removed. Tags are trimmed, empty values dropped, and exact duplicates removed in first-occurrence order. Metadata never changes RuleID identity. `set.Rule(id)` returns immutable `RuleInfo` and a presence boolean; `set.Rules()` lists metadata in execution order. Tags and view slices are defensive copies. Result, Explain, and Trace rule views expose the same descriptive metadata. See the compiling [reusable pricing example](ruleset_example_test.go), which uses only the root package and demonstrates both construction paths.
+
+## Observation and diagnostics
+
+Use `WithObserver` on `Fire` or `NewEngineFromRuleSet` to receive synchronous ordered events through `Observer` or `ObserverFunc`. Events expose metadata and execution facts without input or executable callbacks. An observer error or recovered panic adds a separate `result.Diagnostics()` entry and disables observation for that execution; business evaluation continues under the same policy. The next execution enables the observer again. `PropagatePanics` also applies to observers.
+
+Observers manage their own latency, backpressure, and synchronization when shared by concurrent Fire calls. Cancellation of the caller's context and captured-state side effects still take effect. The [observation example](observer_example_test.go) collects read-only facts and inspects an export diagnostic after a successful business result. See the [event contract](docs/architecture.md#observation-and-diagnostics) for ordering, field validity, and timing.
 
 ## Runnable examples
 
@@ -109,7 +115,7 @@ go test ./...
 
 ## Scope and documentation
 
-Rulite provides typed rules, immutable RuleSet/Compile and engines, descriptive metadata, indexed validation issues, deterministic single-pass execution, policies, Result, Explain, and opt-in Trace. Observer, groups, CEL, dynamic definitions, hot reload, and telemetry integration are not implemented.
+Rulite provides typed rules, immutable RuleSet/Compile and engines, descriptive metadata, indexed validation issues, deterministic single-pass execution, policies, Result, Explain, opt-in Trace, synchronous observation, and isolated diagnostics. Groups, CEL, dynamic definitions, hot reload, and telemetry integration are not implemented.
 
 Read [architecture and non-goals](docs/architecture.md), the [roadmap](docs/roadmap.md), [benchmark methodology and baseline](docs/benchmarks.md), and [contributing](CONTRIBUTING.md). Later version goals are plans, not available APIs. Rulite does not replace all conditionals or provide inference, a rule language, workflow orchestration, or automatic rollback.
 

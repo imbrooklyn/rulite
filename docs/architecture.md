@@ -67,9 +67,9 @@ result, err := engine.Fire(ctx, &input, rulite.WithPolicy(policy))
 
 `StopOnFirstMatch` ends after the first matched rule's action attempt, including a continued action error. `StopOnFirstFire` ends only after a successful action; `ContinueOnError` on actions enables fallback. Both policies stop the entire execution. Local selection groups are not implemented.
 
-Options apply left to right. `WithPolicy` replaces the complete policy, `WithPanicMode` replaces the panic mode, `WithTrace` is idempotent, and a zero `FireOption` does nothing. Each option is validated when reached; a later valid option cannot repair an earlier invalid one.
+Options apply left to right. `WithPolicy` replaces the complete policy, `WithPanicMode` replaces the panic mode, `WithObserver` replaces the observer, `WithTrace` is idempotent, and a zero `FireOption` does nothing. Each option is validated when reached; a later valid option cannot repair an earlier invalid one.
 
-`NewEngineFromRuleSet` accepts these same options as immutable engine defaults. With no options, it uses the default policy, `RecoverPanics`, and tracing off. Each Fire applies its options to a value copy of the defaults; overrides never change another call or engine. Enabling tracing as an engine default applies to every call; there is no per-call option to turn an enabled trace off. Use separate engines sharing the set when different trace defaults are needed.
+`NewEngineFromRuleSet` accepts these same options as immutable engine defaults. With no options, it uses the default policy, `RecoverPanics`, tracing off, and no observer. Each Fire applies its options to a value copy of the defaults; overrides never change another call or engine. Enabling tracing as an engine default applies to every call; there is no per-call option to turn an enabled trace off. Use separate engines sharing the set when different trace defaults are needed.
 
 Stop precedence is **panic, observed context cancellation, phase error stop, first-match/first-fire, completion**.
 
@@ -83,7 +83,7 @@ Stop precedence is **panic, observed context cancellation, phase error stop, fir
 | `StopActionError` | Action error with StopOnError |
 | `StopContextCanceled` | A callback boundary observed cancellation |
 | `StopContextDeadlineExceeded` | A callback boundary observed an expired deadline |
-| `StopPanic` | A callback panic was recovered |
+| `StopPanic` | A business callback panic was recovered |
 
 `Result.Stopped()` is false for `StopNone` and `StopCompleted`, true for other reasons. Stopping leaves the remaining rules not evaluated, with `NotEvaluatedExecutionStopped`. A matched action prevented by context has `SkipContextDone`.
 
@@ -91,7 +91,7 @@ Stop precedence is **panic, observed context cancellation, phase error stop, fir
 
 Preflight checks nil context, nil input, invalid engine, then options. The first failure returns its direct sentinel (`ErrNilContext`, `ErrNilInput`, `ErrInvalidEngine`, `ErrInvalidPolicy`, or `ErrInvalidPanicMode`) and a zero Result. No callbacks run.
 
-Once execution starts, every observed error returns `*ExecutionError` with the partial Result, even for one failure or a completed fallback. `Failure` is the sole rule failure model, shared by `Result.Failures()`, `RuleExecution.Error()`, `RuleTrace.Error()`, and the aggregate error tree. It records RuleID, phase, original cause, and continued disposition. `Continued()` means the error policy permitted continuing; context, first-match, or the end may still prevent another call. Recovered panics always have `Continued() == false`.
+Once execution starts, every business execution error returns `*ExecutionError` with the partial Result, even for one failure or a completed fallback. `Failure` is the sole rule failure model, shared by `Result.Failures()`, `RuleExecution.Error()`, `RuleTrace.Error()`, events, and the aggregate error tree. It records RuleID, phase, original cause, and continued disposition. `Continued()` means the error policy permitted continuing; context, first-match, or the end may still prevent another call. Recovered business panics always have `Continued() == false`.
 
 Use `errors.Is` for causes and `errors.As` for typed errors. Failures retain observation order. A context stop additionally preserves `ctx.Err()` and then a distinct `context.Cause(ctx)`. A callback returning `context.Canceled` while the supplied context is active is an ordinary callback error governed by its phase policy.
 
@@ -99,7 +99,7 @@ Context is checked before execution, before each condition, after each condition
 
 Trace may derive the context supplied to conditions while preserving values, deadline, Done, Err, and Cause. Context object identity is not guaranteed. Actions receive the original context.
 
-The default `RecoverPanics` converts a callback panic to `*PanicError`, captures the stack immediately, preserves partial effects, and stops. If cancellation is also observed, both errors survive and `StopPanic` takes precedence. `PanicError.Error()` includes the payload's Go type without formatting its contents; `Value()` returns the original payload and `Stack()` returns copied bytes. `WithPanicMode(PropagatePanics)` propagates the original panic without promising a Result. Runtime fatal errors, other goroutines' panics, process exit, and `runtime.Goexit` are outside callback recovery.
+The default `RecoverPanics` converts a business callback panic to `*PanicError`, captures the stack immediately, preserves partial effects, and stops. If cancellation is also observed, both errors survive and `StopPanic` takes precedence. `PanicError.Error()` includes the payload's Go type without formatting its contents; `Value()` returns the original payload and `Stack()` returns copied bytes. `WithPanicMode(PropagatePanics)` propagates the original panic without promising a Result. Runtime fatal errors, other goroutines' panics, process exit, and `runtime.Goexit` are outside callback recovery.
 
 ## Results and explainability
 
@@ -123,11 +123,34 @@ A zero Result is safely queryable, with `Executed() == false`, zero counts, `Sto
 
 For 100 pricing rules, `Explain().Rules()` gives the complete execution order; `Matched` and `ActionStarted` distinguish eligibility from action attempts; `Fired` and phase failures describe action outcomes. Untouched suffix reasons and the global StopReason explain termination. `Result.Failures()` and the error tree preserve every observed failure. This proves action execution outcomes, not which fields changed. A failed action can write a field, a successful action can write nothing, and a later action can overwrite a prior value. Record `AppliedBy RuleID` in business state when field attribution matters; the [pricing example](../examples/pricing) demonstrates it.
 
+## Observation and diagnostics
+
+`Observer` implements `Observe(context.Context, Event) error`; `ObserverFunc` adapts a function. `WithObserver` configures the same sink for an engine default or one Fire. `WithObserver(nil)` disables it. A nil ObserverFunc is a no-op; other typed-nil implementations are invoked normally and follow the panic policy. No logging dependency, middleware, retry, or continuation interface is involved.
+
+Events are immutable by-value tagged facts emitted from the same transitions as Result, Explain, and Trace. `Kind()` identifies the event. `Rule()` returns a callback-free `RuleInfo` and presence boolean for rule events only. RuleID retains exact identity; order is the zero-based compiled position, and registration index is the original construction position. Rule metadata accessors preserve defensive copies.
+
+| Event kind | Delivery point | Phase, condition outcome, and failure |
+| --- | --- | --- |
+| `EventExecutionStarted` | Successful preflight, before the initial context check | No rule, phase, outcome, or failure |
+| `EventRuleEvaluated` | Condition returned or its panic was recovered | Condition phase; false, true, or error outcome; canonical Failure for error/recovery |
+| `EventRuleMatched` | Immediately after evaluated(true), before the action context boundary | Condition phase, true outcome, no failure |
+| `EventRuleFired` | Successful action return and ledger update | Action phase, no condition outcome or failure |
+| `EventRuleFailed` | Recorded condition or action error/recovered panic | Canonical Failure and its phase; no condition outcome |
+| `EventExecutionFinished` | Final business counts and stop reason, before Fire returns | No rule, phase, outcome, or failure |
+
+`Phase()`, `ConditionOutcome()`, `Failure()`, and `Counts()` return presence booleans. Absent fields return zero values. Counts exist only on start and finish: start has Total equal to NotEvaluated and all other counts zero; finish has final Result counts. `StopReason()` is the final business reason only on finish, otherwise StopNone. A zero Event has `EventNone` and no facts. Events contain no input, context, arbitrary map, action parameters, duration fields, or direct panic payload. Explicit Failure inspection can expose the existing business error chain, including PanicError and its caller-owned payload.
+
+A miss emits evaluated(false). A condition error or recovered panic emits evaluated(error), then failed, sharing one canonical Failure; the boolean returned with an error is ignored. A match emits evaluated(true), then matched. Its action emits fired on success or failed on error/recovery. A context-skipped action emits neither; an uncalled rule emits no events. Matched proves eligibility, not action start. Global selection resolves after the action attempt and ordinary context/error checks, followed by finish. Preflight failures emit nothing. Empty and already-canceled executions still emit start and finish if observation remains enabled.
+
+The first observer error appends a `Diagnostic` to `Result.Diagnostics()` and disables observation for the rest of that execution. The next execution starts enabled. A recovered observer panic does the same with an `ObserverPanicError` cause; it does not create a business Failure or StopPanic. At most one diagnostic exists for the single observer, including a fault on finish. Diagnostics never join ExecutionError, change ErrorMode or selection, retry business callbacks, or change matched/fired counts. `Cause()` and `Unwrap()` preserve error identity for `errors.Is` and `errors.As` on diagnostics. ObserverPanicError retains the original read-only value and an immediate stack; its Error formats only the payload type, and Stack returns copied bytes. `PropagatePanics` propagates an observer panic unchanged, with no promise of a Result or finish event.
+
+Delivery is synchronous on the Fire call and receives the caller's context. Implementations manage latency, backpressure, and synchronization across concurrent executions. Observer latency is part of Fire wall time and overall Trace duration, including finish delivery, but never Condition/Action durations. Events do not consume timing; with Trace off, observation reads no duration clock. Observation failure isolation assumes the observer does not change context or external business state and excludes timing-sensitive external behavior. Real cancellation is checked at the existing next context boundary; no extra check separates evaluated(true) and matched. Cancellation during finish occurs after terminal business facts and cannot change them retroactively. Fire waits for a blocked observer to return even after cancellation. See the [read-only collector example](../observer_example_test.go).
+
 ## Ownership and concurrency
 
-Rules, rule sets, and engines own immutable definitions, metadata, and indexes. Builders own their tag slices; Compile owns registration and ordering storage. Engines share a RuleSet's executable snapshot while owning independent configuration values, without retaining the caller's option slice. Descriptive metadata and lookup indexes form a separate block with no path back to executable callbacks. A completed Result retains that block and outcomes without retaining executable callbacks, input, context, or options. All returned slices and stack bytes are defensive copies; empty collections may be nil. Value views remain immutable through their accessors.
+Rules, rule sets, and engines own immutable definitions, metadata, and indexes. Builders own their tag slices; Compile owns registration and ordering storage. Engines share a RuleSet's executable snapshot while owning independent configuration values, without retaining the caller's option slice. Descriptive metadata and lookup indexes form a separate block with no path back to executable callbacks. A completed Result retains that block, outcomes, and diagnostics without retaining executable callbacks, observers, input, context, or options. Events can outlive delivery with the same ownership boundary. All returned slices and stack bytes are defensive copies; empty collections may be nil. Value views remain immutable through their accessors.
 
-A shared RuleSet supports concurrent metadata reads and engine construction. A shared Engine supports concurrent Fire calls with independently owned inputs; each execution owns its ledger and trace. Completed Result, Explanation, and Trace views support concurrent reads. Input, callback captures, user error objects, and panic payloads are application-owned. Rulite cannot deep-freeze those objects. Treat returned errors and payloads as read-only and synchronize any shared mutable captures.
+A shared RuleSet supports concurrent metadata reads and engine construction. A shared Engine supports concurrent Fire calls with independently owned inputs; each execution owns its ledger, trace, and observation state. Completed Result, Explanation, Trace, Event, and Diagnostic views support concurrent reads. Input, callback and observer captures, user error objects, and panic payloads are application-owned. Rulite cannot deep-freeze those objects. Treat returned errors and payloads as read-only and synchronize any shared mutable captures.
 
 Sharing one mutable input requires caller synchronization around the whole Fire call, including conditions and actions, and around other accesses to that input. Engine does not lock by input address, clone input, or serialize separate executions automatically.
 
@@ -135,6 +158,6 @@ Sharing one mutable input requires caller synchronization around the whole Fire 
 
 Validation, ordering, normalization, and indexing belong to construction. Fire uses the frozen order. With Trace off, Fire reads no duration clock. Ordinary all-miss executions use a sparse ledger without a heap object per rule; matched and failed outcomes retain the records needed for correctness. Explain rendering is on demand. Results are not backed by buffers that will be reused by another execution. See the [measured baseline](benchmarks.md).
 
-Observer, RuleGroup, CEL, dynamic definitions, hot reload, runtime version/revision metadata, and OpenTelemetry are not implemented. See the [roadmap](roadmap.md) for later goals.
+RuleGroup, CEL, dynamic definitions, hot reload, runtime version/revision metadata, and OpenTelemetry are not implemented. See the [roadmap](roadmap.md) for later goals.
 
 Rulite does not provide forward chaining in Fire, incremental evaluation, Agenda, Activation, Working Memory, Dynamic Facts, Rete, Phreak, truth maintenance, a DSL or YAML rule language, workflow orchestration, BRMS, distributed execution, a global registry, reflection-based field inspection, or automatic rollback. Rules execute once per pass; external nondeterminism in I/O, time, randomness, shared state, or cancellation arrival remains the application's responsibility.

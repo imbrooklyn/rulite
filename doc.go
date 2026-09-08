@@ -21,9 +21,12 @@
 // in their own state. Trace adds timing and built-in combinator child outcomes.
 // Context cancellation is cooperative at callback boundaries; Fire never leaves
 // a callback running in the background after returning.
+// WithObserver adds synchronous ordered events. Observer errors and recovered
+// panics become independent Result diagnostics, without changing business policy
+// or outcomes. Observers must manage their own latency and shared-state safety.
 //
 // The type parameter T should be a non-pointer business state type. Conditions
 // observe *T without mutating it; actions may mutate it or perform external
 // side effects. Rule definitions and engines are immutable, but captured
-// callback state remains the caller's responsibility.
+// callback and observer state remains the caller's responsibility.
 package rulite

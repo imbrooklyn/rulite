@@ -1,6 +1,6 @@
 # Benchmarks
 
-These measurements retain the v0.1 workloads in [benchmark_test.go](../benchmark_test.go) and add RuleSet/metadata measurements from [compile_benchmark_test.go](../compile_benchmark_test.go). They are reproducible machine baselines, not a latency SLA or a prediction for business callbacks, network providers, or other hardware.
+These measurements retain the v0.1 workloads in [benchmark_test.go](../benchmark_test.go), RuleSet/metadata measurements from [compile_benchmark_test.go](../compile_benchmark_test.go), and observation workloads from [observer_benchmark_test.go](../observer_benchmark_test.go). They are reproducible machine baselines, not a latency SLA or a prediction for business callbacks, network providers, or other hardware.
 
 ## Environment and reproduction
 
@@ -203,9 +203,54 @@ Full construction is more expensive than the historical v0.1 measurements, with 
 
 The allocation test checks both construction paths at 1, 100, and 10,000 rules: no outcome records for misses, no trace storage, and zero allocations with the test callbacks. The existing Fire scale, selection, error, Trace, Explain, and concurrent workloads remain in the suite.
 
+## Observation measurements
+
+Measured on 2026-09-09: Apple M4 Pro, macOS 26.5.2 (25F84), Go 1.27.0, darwin/arm64, and default GOMAXPROCS 12. The complete suite ran 120 workloads with three 100 ms samples each. These tables show medians; earlier tables retain their dated historical measurements. Reproduce the full suite with the command above, or observation alone with:
+
+```sh
+go test -run '^$' -bench '^BenchmarkFireObserver$' -benchmem -benchtime=100ms -count=3
+```
+
+Each case uses a precompiled RuleSet and prebuilt engine, resetting input, delivery counter, and collection length per Fire. Modes cover no observer, a minimal observer with a counter and nil return, event collection, and error/panic at the first event followed by disabled observation. Trace combinations use the same callbacks and event sinks. All cases check business counts, stop reason, error absence, input mutations, event counts, and diagnostic counts. Diagnostic count checks include a defensive Diagnostics slice read in timed iterations. Collector storage is preallocated outside timing and reused by the consumer; allocation numbers exclude that buffer. No framework Result or event storage is recycled. Normal delivery counts are two execution events plus one evaluated event per rule and two additional events per match; first-fault cases deliver exactly once. Noop and collection do not read callback clocks unless Trace is enabled.
+
+`BenchmarkFireObserver`, with 1,000 rules:
+
+| Workload | ns/op | B/op | allocs/op |
+| --- | ---: | ---: | ---: |
+| `none/all_miss/rules_1000` | 9,169 | 0 | 0 |
+| `noop/all_miss/rules_1000` | 17,698 | 192 | 2 |
+| `collect/all_miss/rules_1000` | 18,896 | 192 | 2 |
+| `first_error/all_miss/rules_1000` | 9,261 | 224 | 3 |
+| `first_panic/all_miss/rules_1000` | 31,075 | 7,440 | 7 |
+| `trace_none/all_miss/rules_1000` | 92,624 | 258,336 | 2,002 |
+| `trace_noop/all_miss/rules_1000` | 100,775 | 258,528 | 2,004 |
+| `trace_collect/all_miss/rules_1000` | 105,507 | 258,528 | 2,004 |
+| `none/ten_percent/rules_1000` | 11,220 | 6,120 | 8 |
+| `noop/ten_percent/rules_1000` | 21,461 | 6,312 | 10 |
+| `collect/ten_percent/rules_1000` | 23,187 | 6,312 | 10 |
+| `first_error/ten_percent/rules_1000` | 11,313 | 6,344 | 11 |
+| `first_panic/ten_percent/rules_1000` | 32,742 | 13,560 | 15 |
+| `trace_none/ten_percent/rules_1000` | 100,227 | 264,456 | 2,010 |
+| `trace_noop/ten_percent/rules_1000` | 109,449 | 264,648 | 2,012 |
+| `trace_collect/ten_percent/rules_1000` | 114,308 | 264,648 | 2,012 |
+
+The same modes run at 10 and 100 rules. Without Trace, normal all-miss observation uses two summary allocations totaling 192 bytes at all three sizes, with no per-rule event allocation. Panic recovery includes stack capture. Exporter I/O, queuing, synchronization, and callback work are absent from these fixtures; they add synchronous latency in a real application.
+
+The retained Fire scale baseline and reusable construction also ran in the full suite:
+
+| Benchmark | ns/op | B/op | allocs/op |
+| --- | ---: | ---: | ---: |
+| `BenchmarkFireScale/all_miss/rules_10` | 137.0 | 0 | 0 |
+| `BenchmarkFireScale/all_miss/rules_100` | 935.5 | 0 | 0 |
+| `BenchmarkFireScale/all_miss/rules_1000` | 8,976 | 0 | 0 |
+| `BenchmarkFireScale/all_miss/rules_10000` | 89,997 | 0 | 0 |
+| `BenchmarkNewEngineFromRuleSet/rules_1000` | 14.29 | 32 | 1 |
+
+No-observer Fire preserves the zero-allocation gate; these timing samples are higher than the preceding dated baseline and do not establish unchanged CPU cost. Engine configuration now holds an observer interface, increasing reusable construction from the earlier 16-byte allocation to one 32-byte allocation at all four tested sizes. Short samples do not isolate all timing differences. Neither a universal throughput claim nor a machine-specific timing threshold follows from these numbers.
+
 ## Structural performance guarantees
 
-Ordinary no-trace all-miss Fire measured 0 B/op and 0 allocs/op at every tested scale. The allocation regression test also checks that allocation does not grow with rule count and that no per-rule outcome records are created for misses. This guarantee concerns framework execution storage; caller callbacks and contexts may allocate.
+Ordinary no-trace, no-observer all-miss Fire measured 0 B/op and 0 allocs/op at every tested scale. The allocation regression test also checks that allocation does not grow with rule count and that no per-rule outcome records are created for misses. This guarantee concerns framework execution storage; caller callbacks and contexts may allocate.
 
 Sorting, validation, normalization, and indexes belong to construction, and Trace-off execution reads no duration clock. Successful and failed outcomes retain the records required for Result/Explain correctness. Full tracing and text formatting intentionally cost more; enable tracing per execution and render explanations when needed. No hardware-specific ns/op threshold is enforced.
 

@@ -61,11 +61,12 @@ func (p ExecutionPolicy) WithActionErrors(mode ErrorMode) ExecutionPolicy {
 	return p
 }
 
-// PanicMode determines whether callback panics are recovered or propagated.
+// PanicMode determines whether business and observer panics are recovered or propagated.
 type PanicMode uint8
 
 const (
-	// RecoverPanics records a PanicError with a stack and terminates execution.
+	// RecoverPanics records a business PanicError and terminates execution.
+	// Observer panics become diagnostics and disable observation for this Fire.
 	RecoverPanics PanicMode = iota
 	// PropagatePanics lets the original panic propagate to the caller.
 	PropagatePanics
@@ -76,9 +77,10 @@ const (
 // Options apply from left to right. Every nonzero option is validated when
 // reached, so a later option cannot repair an earlier invalid option.
 type FireOption struct {
-	kind   optionKind
-	policy ExecutionPolicy
-	panic  PanicMode
+	kind     optionKind
+	policy   ExecutionPolicy
+	panic    PanicMode
+	observer Observer
 }
 
 type optionKind uint8
@@ -88,6 +90,7 @@ const (
 	optionPolicy
 	optionTrace
 	optionPanic
+	optionObserver
 )
 
 // WithPolicy replaces the entire execution policy for Fire or an engine default.
@@ -100,13 +103,14 @@ func WithPolicy(policy ExecutionPolicy) FireOption {
 // duration clock or collect trees.
 func WithTrace() FireOption { return FireOption{kind: optionTrace} }
 
-// WithPanicMode selects callback panic handling for Fire or an engine default.
+// WithPanicMode selects business and observer panic handling for Fire or an engine default.
 func WithPanicMode(mode PanicMode) FireOption { return FireOption{kind: optionPanic, panic: mode} }
 
 type executionConfig struct {
-	policy ExecutionPolicy
-	panic  PanicMode
-	trace  bool
+	policy   ExecutionPolicy
+	panic    PanicMode
+	trace    bool
+	observer Observer
 }
 
 func configureExecution(config executionConfig, options []FireOption) (executionConfig, error) {
@@ -121,6 +125,8 @@ func configureExecution(config executionConfig, options []FireOption) (execution
 			config.policy = p
 		case optionTrace:
 			config.trace = true
+		case optionObserver:
+			config.observer = option.observer
 		case optionPanic:
 			if option.panic > PropagatePanics {
 				return executionConfig{}, ErrInvalidPanicMode

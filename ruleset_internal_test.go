@@ -59,7 +59,7 @@ func TestMetadataDoesNotRetainExecutables(t *testing.T) {
 			}
 		}
 	}
-	for _, typ := range []reflect.Type{reflect.TypeFor[snapshotMetadata](), reflect.TypeFor[RuleInfo](), reflect.TypeFor[Result](), reflect.TypeFor[Explanation](), reflect.TypeFor[Trace]()} {
+	for _, typ := range []reflect.Type{reflect.TypeFor[snapshotMetadata](), reflect.TypeFor[RuleInfo](), reflect.TypeFor[Result](), reflect.TypeFor[Explanation](), reflect.TypeFor[Trace](), reflect.TypeFor[Event](), reflect.TypeFor[Diagnostic]()} {
 		inspect(typ)
 	}
 }

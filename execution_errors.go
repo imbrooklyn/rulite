@@ -72,7 +72,7 @@ func (f Failure) Cause() error { return f.cause }
 // or the end of the snapshot prevented further calls. It is false for panics.
 func (f Failure) Continued() bool { return f.continued }
 
-// PanicError describes a recovered callback panic with its original value and
+// PanicError describes a recovered business callback panic with its original value and
 // the stack captured immediately at recovery. Other goroutines, runtime fatal
 // errors, process exit, and runtime.Goexit are outside callback recovery.
 type PanicError struct {
@@ -128,6 +128,7 @@ func (e *PanicError) Stack() []byte {
 // there is just one error or continued failures end in StopCompleted.
 // Rule failures appear in observation order; a context boundary adds ctx.Err()
 // followed by context.Cause(ctx) when the latter is distinct.
+// Observer errors and recovered observer panics are separate Result diagnostics.
 type ExecutionError struct {
 	causes   []error
 	failures []Failure

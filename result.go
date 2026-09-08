@@ -27,7 +27,7 @@ type Counts struct {
 	ConditionFailed int
 	// ActionFailed counts action errors and recovered action panics.
 	ActionFailed int
-	// PanicRecovered counts recovered panics already included in Failed.
+	// PanicRecovered counts recovered business panics already included in Failed.
 	PanicRecovered int
 }
 
@@ -120,17 +120,25 @@ func (s StopReason) String() string {
 
 // Result is an immutable execution ledger, safe for concurrent reading after
 // Fire returns. Its zero value is a safe, not-started result with StopNone.
-// It retains shared rule metadata and sparse outcomes, never callbacks, input,
-// context, or options. User errors and panic values remain caller-owned values
-// that must be treated as read-only. All slice accessors return copies.
+// It retains shared rule metadata, sparse outcomes, and diagnostics, never
+// callbacks, observers, input, context, or options. User errors and panic values
+// remain caller-owned read-only values. All slice accessors return copies.
 type Result struct {
-	metadata *snapshotMetadata
-	counts   Counts
-	stop     StopReason
-	records  []executionRecord
-	failures []Failure
-	trace    *traceData
+	metadata    *snapshotMetadata
+	counts      Counts
+	stop        StopReason
+	records     []executionRecord
+	failures    []Failure
+	trace       *traceData
+	diagnostics []Diagnostic
 }
+
+// Diagnostics returns a defensive copy of observation failures. A single
+// configured observer can contribute at most one diagnostic per execution,
+// because the first error or recovered panic disables it for that Fire.
+// Diagnostics never enter business counts, failures, or ExecutionError.
+// The zero Result returns an empty collection, which may be nil.
+func (r Result) Diagnostics() []Diagnostic { return slices.Clone(r.diagnostics) }
 
 // Only non-default evaluated outcomes occupy records. The evaluated prefix
 // determines ordinary unmatched rules and the untouched suffix.
