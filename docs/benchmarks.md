@@ -248,6 +248,51 @@ The retained Fire scale baseline and reusable construction also ran in the full 
 
 No-observer Fire preserves the zero-allocation gate; these timing samples are higher than the preceding dated baseline and do not establish unchanged CPU cost. Engine configuration now holds an observer interface, increasing reusable construction from the earlier 16-byte allocation to one 32-byte allocation at all four tested sizes. Short samples do not isolate all timing differences. Neither a universal throughput claim nor a machine-specific timing threshold follows from these numbers.
 
+## Repeatable regression sampling
+
+Use the Python standard-library [sampling tool](../scripts/benchmarks.py) with two checkouts on the same otherwise idle host. Supply an empty output directory:
+
+```sh
+python3 -B scripts/benchmarks.py "$REPORT_DIR" --baseline "$BASELINE_CHECKOUT" --samples 6 --benchtime 100ms
+```
+
+The tool builds one root test binary per revision outside measurement. Each of six paired samples starts fresh processes; baseline/candidate order alternates between pairs. Each process runs all benchmarks once with `-test.run=^$ -test.bench=. -test.benchmem -test.benchtime=100ms -test.count=1`. Go version, target settings, CPU headers, and worker counts must agree. Run without race or coverage instrumentation. Omit `--baseline` for candidate-only samples, or use `--bench` to narrow the workload expression.
+
+Artifacts contain raw output, revision IDs and dirty flags, UTC time, OS/architecture, Go settings, GC/CPU environment settings, parsed samples, and JSON/Markdown comparisons. Missing metrics, failed benchmark assertions, changing workload sets within a revision, or incompatible environments fail collection. New and removed workloads are explicitly labeled.
+
+For each common workload, the comparison uses candidate/baseline ns/op ratios paired by sample index. It estimates a 95% percentile bootstrap interval for their median with 10,000 resamples and fixed seed 271828. The default relative tolerance is 15% (`--tolerance 0.15`): a workload receives a review flag only when the interval's lower endpoint exceeds 1.15. Timing flags are advisory. Six short samples and uncorrected multiple comparisons do not prove equivalence, tail latency, or a universal performance guarantee; repeat with longer samples when investigating a flag. B/op and allocs/op medians are also retained.
+
+Pull request CI samples the candidate and base revision sequentially on one runner. Push CI collects the candidate alone. CI uploads raw data and comparisons as `benchmark-results` artifacts for 14 days, including available evidence after failure. Allocation and ownership tests, tooling tests, and malformed or failed benchmark samples can block CI; timing flags do not. No comparison uses absolute ns/op thresholds across runners.
+
+### v0.2 representative samples
+
+Measured on 2026-09-09, Apple M4 Pro, 12 logical CPUs/default GOMAXPROCS 12, macOS 26.5.2 (Darwin 25.5.0), Go 1.27.0, darwin/arm64. Default optimization and GC settings; GOFLAGS and GOEXPERIMENT empty; race instrumentation disabled. The command above ran all 120 workloads six times per revision at 100 ms, comparing the preceding core revision with the current tooling/documentation changes. Core Go sources and workloads were identical. No workload crossed the advisory tolerance; this is a sampling check, not proof that future runtime changes have no cost. The tables contain candidate medians from these six samples.
+
+| Benchmark | ns/op | B/op | allocs/op |
+| --- | ---: | ---: | ---: |
+| `BenchmarkCompile/rules_10` | 680.400 | 1,152 | 9 |
+| `BenchmarkCompile/rules_100` | 8,966.000 | 9,504 | 9 |
+| `BenchmarkCompile/rules_1000` | 129,145.000 | 112,072 | 11 |
+| `BenchmarkCompile/rules_10000` | 1,659,299.500 | 1,002,232 | 39 |
+| `BenchmarkNewEngineFromRuleSet/rules_1000` | 11.600 | 32 | 1 |
+| `BenchmarkRuleSetLookup/rule/500` | 13.945 | 0 | 0 |
+| `BenchmarkValidationLookup/rule/500` | 29.055 | 80 | 1 |
+| `BenchmarkFireScale/all_miss/rules_10` | 138.650 | 0 | 0 |
+| `BenchmarkFireScale/all_miss/rules_100` | 948.350 | 0 | 0 |
+| `BenchmarkFireScale/all_miss/rules_1000` | 9,051.000 | 0 | 0 |
+| `BenchmarkFireScale/all_miss/rules_10000` | 91,062.000 | 0 | 0 |
+
+`BenchmarkFireObserver`, with 1,000 all-miss rules and the observation method described above:
+
+| Workload | ns/op | B/op | allocs/op |
+| --- | ---: | ---: | ---: |
+| `none/all_miss/rules_1000` | 9,161.000 | 0 | 0 |
+| `noop/all_miss/rules_1000` | 17,832.500 | 192 | 2 |
+| `collect/all_miss/rules_1000` | 18,951.500 | 192 | 2 |
+| `first_error/all_miss/rules_1000` | 9,246.500 | 224 | 3 |
+| `first_panic/all_miss/rules_1000` | 30,235.000 | 7,440 | 7 |
+| `trace_noop/all_miss/rules_1000` | 97,381.000 | 258,528 | 2,004 |
+
 ## Structural performance guarantees
 
 Ordinary no-trace, no-observer all-miss Fire measured 0 B/op and 0 allocs/op at every tested scale. The allocation regression test also checks that allocation does not grow with rule count and that no per-rule outcome records are created for misses. This guarantee concerns framework execution storage; caller callbacks and contexts may allocate.

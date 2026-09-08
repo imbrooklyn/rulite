@@ -158,6 +158,10 @@ Sharing one mutable input requires caller synchronization around the whole Fire 
 
 Validation, ordering, normalization, and indexing belong to construction. Fire uses the frozen order. With Trace off, Fire reads no duration clock. Ordinary all-miss executions use a sparse ledger without a heap object per rule; matched and failed outcomes retain the records needed for correctness. Explain rendering is on demand. Results are not backed by buffers that will be reused by another execution. See the [measured baseline](benchmarks.md).
 
+CI retains Go 1.27 and checks allocation and immutable ownership guarantees independently of timing. Benchmark sampling builds each compared revision outside measurement, runs repeated samples on the same host, and preserves raw output and environment metadata as artifacts. Timing comparisons use an explicit tolerance and paired statistical interval; they are advisory. The [benchmark method](benchmarks.md#repeatable-regression-sampling) describes the limits. Performance tooling uses the Python standard library and adds no Go runtime dependency.
+
 RuleGroup, CEL, dynamic definitions, hot reload, runtime version/revision metadata, and OpenTelemetry are not implemented. See the [roadmap](roadmap.md) for later goals.
+
+The required v0.4 CEL Condition adapter will compile expressions before execution, require a boolean result type, and map evaluation errors and unknown outcomes to ordinary Condition errors. It will use explicit typed bindings, documented field mapping, and adapter-owned resource limits while preserving the root callback signatures and standard-library dependency boundary. CEL actions are outside that plan.
 
 Rulite does not provide forward chaining in Fire, incremental evaluation, Agenda, Activation, Working Memory, Dynamic Facts, Rete, Phreak, truth maintenance, a DSL or YAML rule language, workflow orchestration, BRMS, distributed execution, a global registry, reflection-based field inspection, or automatic rollback. Rules execute once per pass; external nondeterminism in I/O, time, randomness, shared state, or cancellation arrival remains the application's responsibility.
