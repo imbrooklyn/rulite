@@ -98,4 +98,4 @@ No duration clock is read without a trace consumer, and ordinary no-trace/no-obs
 
 ## Scope
 
-Runtime provides atomic replacement of complete snapshots. It does not implement in-place Engine mutation, per-rule Add/Remove, remote configuration, a file watcher platform, distributed control planes, automatic rollout or rollback orchestration, telemetry export, Infer, or incremental evaluation. Telemetry integration remains planned in the [roadmap](roadmap.md).
+Runtime provides atomic replacement of complete snapshots. It does not implement in-place Engine mutation, per-rule Add/Remove, remote configuration, a file watcher platform, distributed control planes, automatic rollout or rollback orchestration, telemetry export, Infer, or incremental evaluation. The separate [OpenTelemetry adapter](observability.md) accepts a Runtime in its Fire wrapper and associates telemetry with captured event identity. Its provider lifecycle and bounded export configuration remain outside Runtime.

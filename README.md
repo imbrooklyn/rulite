@@ -116,6 +116,8 @@ Use `WithObserver` on `Fire` or `NewEngineFromRuleSet` to receive synchronous or
 
 Observers manage their own latency, backpressure, and synchronization when shared by concurrent Fire calls. Cancellation of the caller's context and captured-state side effects still take effect. The [observation example](observer_example_test.go) collects read-only facts and inspects an export diagnostic after a successful business result. See the [event contract](docs/architecture.md#observation-and-diagnostics) for ordering, field validity, and timing.
 
+The separate [OpenTelemetry adapter](docs/observability.md) provides `otel.New(traces, metrics, options...)` and `adapter.Fire(ctx, engineOrRuntime, input, options...)`. Each call installs a private Observer, replacing any configured observer. Explicit providers receive low-cardinality completion metrics and one execution span with bounded ordered rule events. Export diagnostics remain separate from business failures; provider owners manage buffering, flush, and shutdown. The root dependency boundary is unchanged.
+
 ## Runnable examples
 
 From a checkout:
@@ -126,6 +128,7 @@ go run ./examples/payment_routing
 go run ./examples/risk_decision
 go run ./examples/cel_pricing
 go run ./examples/dynamic_pricing
+go run ./examples/observability
 go test ./...
 ```
 
@@ -134,10 +137,11 @@ go test ./...
 - [Risk decision](examples/risk_decision): allow, review, reject, nested conditions, Trace, and a conservative default when evidence fails.
 - [CEL pricing](examples/cel_pricing): compile typed bindings, optional coupon presence, and a trusted amount check once; Go actions and a Go audit condition observe sequential mutations.
 - [Dynamic pricing](examples/dynamic_pricing): strict JSON definitions select explicit typed discount, cap, and audit capabilities; compilation produces an ordinary immutable rule set.
+- [Observability](examples/observability): explicit in-memory providers record Runtime execution identity, metrics, and bounded rule events without a network exporter.
 
 ## Scope and documentation
 
-Rulite provides typed rules, immutable RuleSet/Compile and engines, descriptive metadata, indexed validation issues, deterministic single-pass execution, policies, Result, Explain, opt-in Trace, synchronous observation, and isolated diagnostics. v0.3 first-match/first-fire groups, mixed entry compilation, hierarchical explanations, group end reasons, ordered resolution/completion events, and runnable payment/pricing examples are available. CI checks structural performance guarantees and records repeatable benchmark comparisons. The [CEL Condition adapter](docs/cel.md) provides native and protobuf typed bindings, explicit JSON field names, projectors, trusted unary functions, compile-time boolean checks, and bounded synchronous evaluation. [Dynamic definitions](docs/dynamic-rules.md) compile strict JSON and frozen typed action capabilities into ordinary rule sets. Runtime atomic replacement and captured version/revision metadata are available; telemetry integration remains planned.
+Rulite provides typed rules, immutable RuleSet/Compile and engines, descriptive metadata, indexed validation issues, deterministic single-pass execution, policies, Result, Explain, opt-in Trace, synchronous observation, and isolated diagnostics. v0.3 first-match/first-fire groups, mixed entry compilation, hierarchical explanations, group end reasons, ordered resolution/completion events, and runnable payment/pricing examples are available. CI checks structural performance guarantees and records repeatable benchmark comparisons. The [CEL Condition adapter](docs/cel.md) provides native and protobuf typed bindings, explicit JSON field names, projectors, trusted unary functions, compile-time boolean checks, and bounded synchronous evaluation. [Dynamic definitions](docs/dynamic-rules.md) compile strict JSON and frozen typed action capabilities into ordinary rule sets. Runtime atomic replacement, captured version/revision metadata, and the separate OpenTelemetry integration are available.
 
 Read [architecture and non-goals](docs/architecture.md), the [roadmap](docs/roadmap.md), [benchmark methodology and baseline](docs/benchmarks.md), and [contributing](CONTRIBUTING.md). Later version goals are plans, not available APIs. Rulite does not replace all conditionals or provide inference, a rule language, workflow orchestration, or automatic rollback.
 

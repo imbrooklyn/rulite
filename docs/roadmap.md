@@ -13,7 +13,7 @@ Rulite is a typed, deterministic, single-pass business rules engine. The v0.1 co
 
 The [`rulite/cel` Condition adapter](cel.md) provides native and protobuf typed bindings, explicit JSON field mode, typed projectors, trusted unary scalar functions, compile-time boolean checks, bounded evaluation, context cancellation, and concurrent program reuse. Unknown and error outcomes remain ordinary Condition errors. The separate package keeps CEL dependencies outside the root runtime. Unsupported mappings require explicit conversion or fail construction; field names and presence follow the documented native or protobuf mode. [Dynamic definitions](dynamic-rules.md) add strict JSON and a frozen registry of explicitly trusted typed Go actions, producing ordinary rule sets without runtime decoding or arbitrary code discovery.
 
-[Runtime atomic publication](runtime.md) and captured version/revision metadata are available. Every Fire uses one complete snapshot; direct Engine execution remains immutable. The OpenTelemetry adapter is still planned, so the complete v0.5 operations scope is not yet available.
+[Runtime atomic publication](runtime.md), captured version/revision metadata, and the [OpenTelemetry adapter](observability.md) are available. Every Fire uses one complete snapshot; direct Engine execution remains immutable. The adapter uses explicit providers, bounded metric attributes, and one execution span with limited ordered rule events. It preserves core business outcomes and leaves export resources with the provider owner. Broader operational diagnostics remain version goals rather than additional available APIs.
 
 Separate bounded inference may be considered from v0.6 only for demonstrated workloads. Incremental evaluation may be considered from v0.7 only if inference benchmarks justify it. Neither is implemented or part of `Fire`; Fire remains single-pass. Rete and Phreak have no planned version.
 
@@ -21,7 +21,7 @@ Separate bounded inference may be considered from v0.6 only for demonstrated wor
 
 Rule identity, priority order, Condition/Action signatures, match/fire distinctions, immutable engine ownership, and context/panic fundamentals are core stability candidates. During v0.x, builder names, policy constructors, Result accessors, error wrapper shapes, and Explanation/Trace structures may evolve. Exact explanation text is experimental; use structural accessors instead of parsing it.
 
-Observer/Event, diagnostic, group, CEL, dynamic definition/registry, Runtime, and snapshot identity APIs are available but provisional during v0.x. Telemetry APIs remain planned. Internal representations are not public contracts.
+Observer/Event, diagnostic, group, CEL, dynamic definition/registry, Runtime, snapshot identity, and OpenTelemetry adapter APIs are available but provisional during v0.x. Internal representations are not public contracts.
 
 ## Non-goals
 

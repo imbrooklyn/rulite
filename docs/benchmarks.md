@@ -570,6 +570,41 @@ Runtime and direct Engine have the same allocation counts in these samples. Publ
 
 Ordinary no-trace, no-observer all-miss Fire measured 0 B/op and 0 allocs/op at every tested scale. The allocation regression test also checks that allocation does not grow with rule count and that no per-rule outcome records are created for misses. This guarantee concerns framework execution storage; caller callbacks and contexts may allocate.
 
-Sorting, validation, normalization, and indexes belong to construction, and Trace-off execution reads no duration clock. Successful and failed outcomes retain the records required for Result/Explain correctness. Full tracing and text formatting intentionally cost more; enable tracing per execution and render explanations when needed. No hardware-specific ns/op threshold is enforced.
+Sorting, validation, normalization, and indexes belong to construction, and the Trace-off core execution loop reads no duration clock. Explicit observer duration consumers may measure their own intervals. Successful and failed outcomes retain the records required for Result/Explain correctness. Full tracing and text formatting intentionally cost more; enable tracing per execution and render explanations when needed. No hardware-specific ns/op threshold is enforced.
 
 All-match and error-heavy workloads allocate for retained outcomes and failures. A successful fallback still retains its earlier errors. Shared-engine throughput is subject to CPU count, allocator pressure, and callback behavior; these results do not promise linear scaling. Measure your own rule mix and input ownership pattern before setting a service budget.
+
+## OpenTelemetry observation measurements
+
+Measured on 2026-09-09 using an Apple M4 Pro with 12 logical CPUs, macOS 26.5.2 (25F84), Go 1.27.0, GOOS=darwin, GOARCH=arm64, and OpenTelemetry Go v1.46.0. These are medians of three 100 ms samples per workload on one host, without race or coverage instrumentation. Tests, fuzzing, and other benchmark commands did not run concurrently with these samples. They are observations, not an SLA or machine-independent threshold.
+
+```sh
+go test ./otel -run '^$' -bench '^BenchmarkFireTelemetry$' -benchmem -benchtime=100ms -count=3
+```
+
+| Workload | ns/op | B/op | allocs/op |
+| --- | ---: | ---: | ---: |
+| `BenchmarkFireTelemetry/absent/matches_0/rules_100` | 1,053 | 0 | 0 |
+| `BenchmarkFireTelemetry/noop_observer/matches_0/rules_100` | 2,160 | 192 | 2 |
+| `BenchmarkFireTelemetry/otel_noop/matches_0/rules_100` | 3,420 | 392 | 7 |
+| `BenchmarkFireTelemetry/sdk_not_recording/matches_0/rules_100` | 3,552 | 488 | 8 |
+| `BenchmarkFireTelemetry/metrics_only/matches_0/rules_100` | 3,758 | 440 | 10 |
+| `BenchmarkFireTelemetry/trace_recording/matches_0/rules_100` | 27,948 | 101,040 | 427 |
+| `BenchmarkFireTelemetry/trace_limit_4/matches_0/rules_100` | 5,615 | 7,216 | 40 |
+| `BenchmarkFireTelemetry/in_memory_exporter/matches_0/rules_100` | 27,901 | 102,016 | 430 |
+| `BenchmarkFireTelemetry/absent/matches_10/rules_100` | 1,285 | 744 | 5 |
+| `BenchmarkFireTelemetry/noop_observer/matches_10/rules_100` | 2,586 | 936 | 7 |
+| `BenchmarkFireTelemetry/otel_noop/matches_10/rules_100` | 4,153 | 1,136 | 12 |
+| `BenchmarkFireTelemetry/sdk_not_recording/matches_10/rules_100` | 4,220 | 1,232 | 13 |
+| `BenchmarkFireTelemetry/metrics_only/matches_10/rules_100` | 4,589 | 1,216 | 17 |
+| `BenchmarkFireTelemetry/trace_recording/matches_10/rules_100` | 33,535 | 116,024 | 512 |
+| `BenchmarkFireTelemetry/trace_limit_4/matches_10/rules_100` | 6,452 | 7,896 | 45 |
+| `BenchmarkFireTelemetry/in_memory_exporter/matches_10/rules_100` | 33,646 | 117,000 | 515 |
+
+The [benchmark source](../otel/benchmark_test.go) builds the 100-rule immutable Engine and providers outside Fire timing. Zero matches evaluates every condition as false; ten matches occur at every tenth rule and run ten actions. Each iteration resets its independent input, verifies final counts, stop reason, version/revision, and diagnostic count, and retains a Result/counter sink. All modes use ReportAllocs. Rule compilation and adapter construction are excluded; [Compile measurements](#ruleset-and-metadata-measurements) remain separate.
+
+Absent and noop Observer modes expose framework execution and delivery costs. The OTel noop mode includes the private observation scope and API calls with official no-op providers. SDK not-recording uses NeverSample plus an explicit wildcard drop View; output validation confirms no metric measurements. Metrics-only uses a ManualReader and no trace recording. The reader is collected outside timing and its execution sum must equal completed calls.
+
+Trace-recording uses the real SDK and a synchronous processor that checks event count and identity, without an exporter. It retains 100 or 120 ordered events. The four-event limit mode uses the same processor and preserves complete business results plus one limit diagnostic. In-memory exporter mode adds the SDK's synchronous in-memory exporter and resets it before each iteration, retaining at most one span; reset cost is included. Final span output is checked outside timing. No mode opens a network connection. These paths separate framework, adapter/API, SDK recording, and in-memory export costs; small timing differences within similar modes should not be read as a general performance ranking.
+
+Event limits bound export storage and cost, not core evaluation or Result completeness. Core tracing is off in these workloads; the execution span is independent of the full Rulite Trace. There is no pooling, discarded business result, or per-rule span. Real providers, exporters, resource attributes, sampling, callbacks, and input sizes can change both latency and allocation. See [observation semantics and ownership](observability.md).
