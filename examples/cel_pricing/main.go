@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 
@@ -23,14 +24,40 @@ type Price struct {
 	AppliedBy rulite.RuleID
 	// Audited records completion of the ordinary Go audit action.
 	Audited bool
+	// Coupon is optional; an explicitly empty coupon is invalid for the VIP offer.
+	Coupon *string `json:"coupon"`
+}
+
+// Customer is the explicit customer view available to expressions.
+type Customer struct {
+	// VIP marks customers eligible for the premium offer.
+	VIP bool
 }
 
 func pricingEngine() (*rulite.Engine[Price], error) {
-	compiler, err := cel.NewCompiler[Price]("input")
+	builder, err := cel.NewBuilder[Price](cel.WithCostLimit(1000))
 	if err != nil {
 		return nil, err
 	}
-	eligible, err := compiler.Compile("input.VIP && input.Total >= 10000")
+	if err := builder.Bind("input", func(_ context.Context, p *Price) (*Price, error) { return p, nil }); err != nil {
+		return nil, err
+	}
+	if err := builder.Bind("customer", func(_ context.Context, p *Price) (Customer, error) { return Customer{VIP: p.VIP}, nil }); err != nil {
+		return nil, err
+	}
+	if err := builder.Function("validAmount", func(total int64) (bool, error) {
+		if total < 0 {
+			return false, errors.New("order amount must not be negative")
+		}
+		return total >= 10000, nil
+	}); err != nil {
+		return nil, err
+	}
+	compiler, err := builder.Build()
+	if err != nil {
+		return nil, err
+	}
+	eligible, err := compiler.Compile("customer.VIP && validAmount(input.Total) && (!has(input.Coupon) || input.Coupon == 'VIP')")
 	if err != nil {
 		return nil, err
 	}

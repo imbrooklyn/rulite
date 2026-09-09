@@ -20,26 +20,22 @@ type namedList []int64
 
 func TestUnsupportedSchemas(t *testing.T) {
 	for _, tp := range []reflect.Type{
-		reflect.TypeFor[int](), reflect.TypeFor[*nativeFixture](), reflect.TypeFor[struct{ X int }](),
-		reflect.TypeFor[embeddedFixture](), reflect.TypeFor[time.Time](),
+		reflect.TypeFor[struct{ X int }](), reflect.TypeFor[embeddedFixture](),
 	} {
-		if _, err := nativeSchema(tp); err == nil {
+		if _, err := newSchema(false).native(tp, 0); err == nil {
 			t.Fatalf("unsupported schema accepted: %v", tp)
 		}
 	}
-	assertRejectedSchema[structWithField[*int64]](t)
-	assertRejectedSchema[structWithField[nativeFixture]](t)
-	assertRejectedSchema[structWithField[map[string]int]](t)
+	assertRejectedSchema[int](t)
+	assertRejectedSchema[*nativeFixture](t)
+	assertRejectedSchema[time.Time](t)
+	assertRejectedSchema[structWithField[**int64]](t)
 	assertRejectedSchema[structWithField[any]](t)
 	assertRejectedSchema[structWithField[chan int]](t)
 	assertRejectedSchema[structWithField[func()]](t)
 	assertRejectedSchema[structWithField[complex128]](t)
 	assertRejectedSchema[structWithField[uintptr]](t)
 	assertRejectedSchema[structWithField[[2]int]](t)
-	assertRejectedSchema[structWithField[time.Duration]](t)
-	assertRejectedSchema[structWithField[[]time.Duration]](t)
-	assertRejectedSchema[structWithField[[][]int]](t)
-	assertRejectedSchema[structWithField[namedList]](t)
 	assertRejectedSchema[structWithField[types.Int]](t)
 }
 
@@ -124,7 +120,8 @@ func TestAggregateInputLimits(t *testing.T) {
 		Other []int
 	}
 	tp := reflect.TypeFor[input]()
-	fields, err := nativeSchema(tp)
+	schema := newSchema(false)
+	_, err := schema.native(tp, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,8 +135,45 @@ func TestAggregateInputLimits(t *testing.T) {
 		{input{Data: make([]byte, maxInputBytes+1)}, false},
 		{input{Texts: make([]string, maxListItems), Other: []int{1}}, false},
 	} {
-		if withinInputLimits(reflect.ValueOf(tc.value), fields) != tc.want {
+		budget := inputBudget{bytes: maxInputBytes, items: maxListItems, nodes: 65536, ctx: context.Background()}
+		if (budget.native(reflect.ValueOf(tc.value), schema, 0) == nil) != tc.want {
 			t.Fatal("aggregate bound changed")
 		}
+	}
+}
+
+func TestTraversalWorkLimit(t *testing.T) {
+	type wide struct{ A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P int64 }
+	type input struct{ Rows []wide }
+	s := newSchema(false)
+	if _, err := s.native(reflect.TypeFor[input](), 0); err != nil {
+		t.Fatal(err)
+	}
+	value := input{Rows: make([]wide, 4096)}
+	budget := inputBudget{bytes: maxInputBytes, items: maxListItems, nodes: 65536, ctx: context.Background()}
+	if err := budget.native(reflect.ValueOf(value), s, 0); !errors.Is(err, ErrInputLimit) {
+		t.Fatal("input work bound was not enforced")
+	}
+}
+
+func TestFunctionPanicDoesNotFormatPayload(t *testing.T) {
+	formatted := false
+	b, err := NewBuilder[nativeFixture]()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Function("broken", func(bool) (bool, error) { panic(privateError{&formatted}) }); err != nil {
+		t.Fatal(err)
+	}
+	c, err := b.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := c.Compile("broken(true)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := f(context.Background(), &nativeFixture{}); ok || !errors.Is(err, ErrFunctionPanic) || formatted {
+		t.Fatal("function panic disclosed its payload")
 	}
 }

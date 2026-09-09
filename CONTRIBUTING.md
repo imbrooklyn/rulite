@@ -20,7 +20,7 @@ Run each fuzz target independently for a short smoke check; increase the duratio
 for target in FuzzCompileMetadata FuzzRuleValidation FuzzExecutionOutcomes FuzzCombinatorNesting FuzzExecutionErrorTree FuzzObservationStream FuzzGroupExecution; do
     go test -run '^$' -fuzz "^${target}$" -fuzztime=5s -parallel=2 || exit 1
 done
-for target in FuzzNativeComparison FuzzBoundedCompile; do
+for target in FuzzNativeComparison FuzzBoundedCompile FuzzTypedMapping; do
     go test ./cel -run '^$' -fuzz "^${target}$" -fuzztime=5s -parallel=2 || exit 1
 done
 ```

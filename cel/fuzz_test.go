@@ -70,3 +70,65 @@ func FuzzBoundedCompile(f *testing.F) {
 		}
 	})
 }
+
+func FuzzTypedMapping(f *testing.F) {
+	for _, source := range []string{
+		"has(order.Child) && order.Child.Score >= 0", "order.Lookup['missing'].Score == 0",
+		"order.Numbers.all(x, x >= 0)", "order.Nested.At == timestamp('0001-01-01T00:00:00Z')",
+		"order.Numbers.map(x, x + 1).all(x, x > 0)", "dyn(order.Nested).Missing == 1", "order.renamed == 0", "(",
+	} {
+		f.Add(source, []byte{1, 2, 3})
+	}
+	b := builder[nativeMapping](f, cel.WithCostLimit(100))
+	if err := b.Bind("order", func(_ context.Context, p *nativeMapping) (*nativeMapping, error) { return p, nil }); err != nil {
+		f.Fatal(err)
+	}
+	c := built(f, b)
+	f.Fuzz(func(t *testing.T, source string, data []byte) {
+		if len(source) > 256 || len(data) > 64 || strings.Count(source, "(")+strings.Count(source, "[")+strings.Count(source, "{") > 16 {
+			t.Skip()
+		}
+		first, err := c.Compile(source)
+		second, again := c.Compile(source)
+		if (err == nil) != (again == nil) {
+			t.Fatal("compile outcome is not deterministic")
+		}
+		if err != nil {
+			var a, b *cel.CompileError
+			if first != nil || second != nil || !errors.As(err, &a) || !errors.As(again, &b) || a.Stage() != b.Stage() || a.Error() != b.Error() || a.Unwrap().Error() != b.Unwrap().Error() {
+				t.Fatal("compile diagnostics diverged")
+			}
+			return
+		}
+		input := nativeMapping{Lookup: map[string]*address{}, Numbers: make(namedNumbers, len(data))}
+		for i, value := range data {
+			input.Numbers[i] = int64(value)
+		}
+		if len(data) > 0 {
+			input.Child = &address{Score: int64(data[0])}
+		}
+		before := append(namedNumbers(nil), input.Numbers...)
+		a, ae := first(context.Background(), &input)
+		bv, be := second(context.Background(), &input)
+		if a != bv || (ae == nil) != (be == nil) || len(input.Numbers) != len(before) {
+			t.Fatal("mapping outcome changed")
+		}
+		for i := range before {
+			if input.Numbers[i] != before[i] {
+				t.Fatal("mapping mutated input")
+			}
+		}
+		if ae != nil {
+			var runtimeErr *cel.RuntimeError
+			if a || !errors.As(ae, &runtimeErr) || ae.Error() != be.Error() || errors.Is(ae, cel.ErrCostLimit) != errors.Is(be, cel.ErrCostLimit) {
+				t.Fatal("mapping failure became a match or lost its class")
+			}
+		}
+		if source == "has(order.Child) && order.Child.Score >= 0" && (ae != nil || a != (len(data) > 0)) {
+			t.Fatal("presence disagrees with Go oracle")
+		}
+		if (source == "order.Lookup['missing'].Score == 0" || source == "dyn(order.Nested).Missing == 1") && (a || ae == nil) {
+			t.Fatal("missing data became a silent false")
+		}
+	})
+}

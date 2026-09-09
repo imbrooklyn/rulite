@@ -13,6 +13,12 @@ var (
 	ErrCostLimit = errors.New("rulite/cel: evaluation cost limit exceeded")
 	// ErrInputLimit identifies input exceeding the documented size limits.
 	ErrInputLimit = errors.New("rulite/cel: input size limit exceeded")
+	// ErrNilBinding identifies a nil projected root value.
+	ErrNilBinding = errors.New("rulite/cel: nil binding value")
+	// ErrProtoDescriptor identifies a message with an unexpected descriptor.
+	ErrProtoDescriptor = errors.New("rulite/cel: protobuf descriptor mismatch")
+	// ErrFunctionPanic identifies a panic inside a trusted CEL function.
+	ErrFunctionPanic = errors.New("rulite/cel: trusted function panicked")
 )
 
 // CompileError identifies an environment, parse, check, output, or program build

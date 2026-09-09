@@ -462,6 +462,40 @@ Compile starts from an existing native compiler and times parsing, checking, exa
 
 CEL evaluation includes native reflection, input-size checks, independent activation, cost accounting, and context boundaries. It allocates even when a rule misses. These integration costs do not change the root's allocation guarantee for nonallocating Go conditions. Compiling once and reusing conditions avoids repeating compilation in Fire. The Go comparison uses simple direct field reads and does not perform CEL's resource checks. Results do not predict complex expression, regex, or external action costs; measure the actual business workload.
 
+## Typed CEL binding measurements
+
+Measured on 2026-09-09 with native/protobuf typed bindings: Apple M4 Pro, 12 logical CPUs/default GOMAXPROCS 12, macOS 26.5.2 (25F84), Go 1.27.0, darwin/arm64. Default optimization and GC settings, empty GOFLAGS/GOEXPERIMENT, no race instrumentation. All 34 CEL workloads ran three 100 ms samples; the table shows per-metric medians for the 19 binding workloads. The earlier CEL table records the narrower native mapper. These samples are not a cross-version performance comparison or latency SLA.
+
+```sh
+go test ./cel -run '^$' -bench . -benchmem -benchtime=100ms -count=3
+```
+
+[Binding compile and evaluation](../cel/binding_benchmark_test.go) use native Go names, explicit JSON field names, and descriptor-based protobuf messages. Compile times 1/10/100 distinct expressions after the schema/compiler has been built, then validates the retained conditions outside timing. Eval builds all programs outside timing and checks 1/5/50 matches respectively. Input is reset each iteration; the prepared protobuf message is read-only and is not cloned. Every workload reports allocations and retains a sink.
+
+[Binding projection](../cel/projection_benchmark_test.go) measures two typed projectors, aggregate input validation, and a fresh activation without CEL evaluation. It includes resetting input with a fresh two-element list and verifying projected values. Eval includes projection, recursive input checks, context boundaries, and CEL cost accounting. The Go predicate controls in the existing suite use direct reads without these integration checks. No absolute timing threshold is enforced; measure the actual schema, expression, and callback workload.
+
+| Benchmark | ns/op | B/op | allocs/op |
+| --- | ---: | ---: | ---: |
+| `BenchmarkBindingProjection` | 102.5 | 152 | 5 |
+| `BenchmarkBindingCompile/native/expressions_1` | 13,015 | 15,951 | 320 |
+| `BenchmarkBindingCompile/native/expressions_10` | 129,788 | 159,522 | 3,201 |
+| `BenchmarkBindingCompile/native/expressions_100` | 1,442,396 | 1,595,671 | 32,015 |
+| `BenchmarkBindingCompile/json/expressions_1` | 13,486 | 16,001 | 320 |
+| `BenchmarkBindingCompile/json/expressions_10` | 134,816 | 160,016 | 3,201 |
+| `BenchmarkBindingCompile/json/expressions_100` | 1,485,958 | 1,600,568 | 32,017 |
+| `BenchmarkBindingCompile/protobuf/expressions_1` | 13,346 | 15,552 | 316 |
+| `BenchmarkBindingCompile/protobuf/expressions_10` | 134,545 | 155,530 | 3,161 |
+| `BenchmarkBindingCompile/protobuf/expressions_100` | 1,471,571 | 1,555,707 | 31,616 |
+| `BenchmarkBindingEval/native/expressions_1` | 529.2 | 465 | 14 |
+| `BenchmarkBindingEval/native/expressions_10` | 5,363 | 4,653 | 140 |
+| `BenchmarkBindingEval/native/expressions_100` | 60,614 | 46,544 | 1,400 |
+| `BenchmarkBindingEval/json/expressions_1` | 533.6 | 465 | 14 |
+| `BenchmarkBindingEval/json/expressions_10` | 5,463 | 4,653 | 140 |
+| `BenchmarkBindingEval/json/expressions_100` | 60,745 | 46,542 | 1,400 |
+| `BenchmarkBindingEval/protobuf/expressions_1` | 728.7 | 561 | 17 |
+| `BenchmarkBindingEval/protobuf/expressions_10` | 7,380 | 5,615 | 170 |
+| `BenchmarkBindingEval/protobuf/expressions_100` | 80,488 | 56,173 | 1,700 |
+
 ## Structural performance guarantees
 
 Ordinary no-trace, no-observer all-miss Fire measured 0 B/op and 0 allocs/op at every tested scale. The allocation regression test also checks that allocation does not grow with rule count and that no per-rule outcome records are created for misses. This guarantee concerns framework execution storage; caller callbacks and contexts may allocate.

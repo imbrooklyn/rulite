@@ -6,13 +6,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"reflect"
 	"regexp"
 
 	celgo "cel.dev/cel-go/cel"
 	"cel.dev/cel-go/common/types"
 	"cel.dev/cel-go/common/types/ref"
-	"cel.dev/cel-go/ext"
 	"cel.dev/cel-go/interpreter"
 	"github.com/imbrooklyn/rulite"
 )
@@ -23,21 +21,27 @@ const maxSourceBytes = 4096
 type Option struct {
 	costLimit    uint64
 	hasCostLimit bool
+	jsonNames    bool
 }
 
 // WithCostLimit sets a positive per-evaluation CEL cost budget. The default is
 // 10,000. Zero is rejected by NewCompiler. Options apply in order; an invalid
 // option cannot be repaired by a later one. Cost is work accounting, not a
 // wall-clock deadline or memory limit.
-func WithCostLimit(limit uint64) Option { return Option{limit, true} }
+func WithCostLimit(limit uint64) Option { return Option{costLimit: limit, hasCostLimit: true} }
 
-// Compiler is an immutable native schema and compilation configuration.
-// Construct it with NewCompiler; its zero value is invalid. Compile can be
+// WithJSONFieldNames explicitly uses native JSON tag names. Empty tag names
+// retain the Go name, a dash hides the field, and other tag options are ignored.
+// It never changes protobuf descriptor names or enables name fallback.
+func WithJSONFieldNames() Option { return Option{jsonNames: true} }
+
+// Compiler is an immutable binding schema and compilation configuration.
+// Construct it with NewCompiler or Builder.Build; its zero value is invalid. Compile can be
 // called concurrently. It never evaluates input or executes an action.
 type Compiler[T any] struct {
 	env       *celgo.Env
-	variable  string
-	fields    []int
+	bindings  []binding[T]
+	schema    *schema
 	costLimit uint64
 }
 
@@ -45,53 +49,21 @@ var variableName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}$`)
 
 // NewCompiler binds variable to a named, non-pointer Go struct T without a
 // sample input. Returned conditions receive *T directly, without a field map
-// conversion or clone. Exported fields use exact Go names, ignoring JSON tags.
+// conversion or clone. Exported fields use exact Go names unless explicitly
+// configured with WithJSONFieldNames.
 // Supported schemas and fixed source/input limits are described in the CEL guide.
 // Variable names are ASCII identifiers of 1-64 bytes and cannot be CEL keywords.
 // Options are consumed immediately and their slice is not retained. On failure
 // the compiler is nil and the error is a *CompileError with stage environment.
 func NewCompiler[T any](variable string, options ...Option) (*Compiler[T], error) {
-	fail := func(err error) (*Compiler[T], error) { return nil, &CompileError{stage: "environment", cause: err} }
-	if !variableName.MatchString(variable) {
-		return fail(errors.New("variable must be an ASCII identifier of 1-64 bytes"))
-	}
-	costLimit := uint64(10000)
-	for _, option := range options {
-		if option.hasCostLimit {
-			if option.costLimit == 0 {
-				return fail(errors.New("cost limit must be positive"))
-			}
-			costLimit = option.costLimit
-		}
-	}
-	tp := reflect.TypeFor[T]()
-	fields, err := nativeSchema(tp)
+	b, err := NewBuilder[T](options...)
 	if err != nil {
-		return fail(err)
+		return nil, err
 	}
-	nt, err := types.NewNativeType(tp)
-	if err != nil {
-		return fail(err)
+	if err := b.bindInput(variable); err != nil {
+		return nil, err
 	}
-	env, err := celgo.NewEnv(
-		ext.NativeTypes(tp), celgo.Variable(variable, celgo.ObjectType(nt.TypeName())),
-		celgo.ParserExpressionSizeLimit(maxSourceBytes), celgo.ParserRecursionLimit(64),
-		celgo.ParserErrorRecoveryLimit(16), celgo.ExpressionNestingDepthLimit(64),
-		celgo.ASTValidators(celgo.ValidateComprehensionNestingLimit(2), regexBudget{}),
-	)
-	if err != nil {
-		return fail(err)
-	}
-	// Parsing and checking the binding itself also rejects reserved keywords and
-	// names that resolve to CEL literals or types instead of the declared object.
-	probe, issues := env.Compile(variable)
-	if issues.Err() != nil {
-		return fail(issues.Err())
-	}
-	if !probe.OutputType().IsExactType(celgo.ObjectType(nt.TypeName())) {
-		return fail(errors.New("variable does not resolve to the native input type"))
-	}
-	return &Compiler[T]{env: env, variable: variable, fields: fields, costLimit: costLimit}, nil
+	return b.Build()
 }
 
 // Compile parses source, type-checks it, requires an exact bool result, and
@@ -113,7 +85,7 @@ func (c *Compiler[T]) Compile(source string) (rulite.Condition[T], error) {
 	if err != nil {
 		return nil, err
 	}
-	variable, fields := c.variable, c.fields
+	bindings, schema := c.bindings, c.schema
 	return func(ctx context.Context, input *T) (bool, error) {
 		if ctx == nil {
 			return false, &RuntimeError{id, rulite.ErrNilContext}
@@ -124,10 +96,11 @@ func (c *Compiler[T]) Compile(source string) (rulite.Condition[T], error) {
 		if err := contextError(ctx); err != nil {
 			return false, &RuntimeError{id, err}
 		}
-		if !withinInputLimits(reflect.ValueOf(input).Elem(), fields) {
-			return false, &RuntimeError{id, ErrInputLimit}
+		activation, err := projectBindings(ctx, input, bindings, schema)
+		if err != nil {
+			return false, &RuntimeError{id, errors.Join(err, contextError(ctx))}
 		}
-		return evaluate(ctx, program, &nativeActivation{variable, input}, id)
+		return evaluate(ctx, program, activation, id)
 	}, nil
 }
 
