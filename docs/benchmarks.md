@@ -608,3 +608,80 @@ Absent and noop Observer modes expose framework execution and delivery costs. Th
 Trace-recording uses the real SDK and a synchronous processor that checks event count and identity, without an exporter. It retains 100 or 120 ordered events. The four-event limit mode uses the same processor and preserves complete business results plus one limit diagnostic. In-memory exporter mode adds the SDK's synchronous in-memory exporter and resets it before each iteration, retaining at most one span; reset cost is included. Final span output is checked outside timing. No mode opens a network connection. These paths separate framework, adapter/API, SDK recording, and in-memory export costs; small timing differences within similar modes should not be read as a general performance ranking.
 
 Event limits bound export storage and cost, not core evaluation or Result completeness. Core tracing is off in these workloads; the execution span is independent of the full Rulite Trace. There is no pooling, discarded business result, or per-rule span. Real providers, exporters, resource attributes, sampling, callbacks, and input sizes can change both latency and allocation. See [observation semantics and ownership](observability.md).
+
+## Snapshot scale and retention
+
+Measured on 2026-09-09: Apple M4 Pro, 12 logical CPUs/default GOMAXPROCS 12, macOS 26.5.2 (25F84), Go 1.27.0, GOOS/GOARCH darwin/arm64. CEL v0.32.0 and OpenTelemetry v1.46.0 remain pinned. Default compiler/GC settings, no race or coverage instrumentation; test, fuzz, heap-profile and benchmark workloads ran separately. Tables show per-metric medians of three 100 ms samples. These short measurements do not establish tail latency, equivalent CPU cost, or a general service budget.
+
+```sh
+go test . -run '^$' -bench '^(BenchmarkSnapshotFire|BenchmarkRuntimePublish|BenchmarkRuntimeSwapScale|BenchmarkRuntimeChurn|BenchmarkCompile)$' -benchmem -benchtime=100ms -count=3
+go test ./examples/runtime_reload -run '^$' -bench . -benchmem -benchtime=100ms -count=3
+```
+
+The [snapshot suite](../runtime_benchmark_test.go) now covers 10/100/1,000/10,000 rules. Engines, closures and identity are prepared before Fire timing; each call resets independent input and verifies counts, mutations, stop, version, revision and digest. All-miss and 10% match use the same callbacks for direct Engine and Runtime. Publication alternates prepared engines without compilation; Compile remains a separate benchmark.
+
+| Benchmark | ns/op | B/op | allocs/op |
+| --- | ---: | ---: | ---: |
+| `BenchmarkSnapshotFire/engine/matched_false/rules_10` | 205.4 | 0 | 0 |
+| `BenchmarkSnapshotFire/runtime/matched_false/rules_10` | 206 | 0 | 0 |
+| `BenchmarkSnapshotFire/engine/matched_false/rules_100` | 1,086 | 0 | 0 |
+| `BenchmarkSnapshotFire/runtime/matched_false/rules_100` | 1,086 | 0 | 0 |
+| `BenchmarkSnapshotFire/engine/matched_false/rules_1000` | 10,163 | 0 | 0 |
+| `BenchmarkSnapshotFire/runtime/matched_false/rules_1000` | 10,217 | 0 | 0 |
+| `BenchmarkSnapshotFire/engine/matched_false/rules_10000` | 100,434 | 0 | 0 |
+| `BenchmarkSnapshotFire/runtime/matched_false/rules_10000` | 100,372 | 0 | 0 |
+| `BenchmarkSnapshotFire/runtime/matched_true/rules_10` | 225.3 | 24 | 1 |
+| `BenchmarkSnapshotFire/runtime/matched_true/rules_100` | 1,345 | 744 | 5 |
+| `BenchmarkSnapshotFire/runtime/matched_true/rules_1000` | 12,475 | 6,120 | 8 |
+| `BenchmarkSnapshotFire/runtime/matched_true/rules_10000` | 122,741 | 77,800 | 12 |
+| `BenchmarkRuntimePublish` | 19.81 | 48 | 1 |
+
+The [concurrent scale workload](../runtime_benchmark_test.go) runs exactly 1/2/4/8/16/32 workers at each of those four rule counts, with 10% matching. It compares direct Engine with Runtime at zero publications and one publication per 1, 32 or 1024 completed operations. Operation indexes are partitioned across workers; index zero publishes when enabled, so the exact count is the ceiling of Fire count divided by the interval. All workers start at a channel barrier. Worker startup, synchronization, publication and cheap correctness checks are timed. Later conditions check the captured generation and preceding action count; final output must match one complete snapshot. The benchmark reports actual publish/fire and evaluated/s as well as allocations.
+
+Here are the 1,000-rule cases. The exact prefix is `BenchmarkRuntimeSwapScale/rules_1000/workers_N/`, followed by `engine` or `runtime/publish_every_K`; K=0 disables publication. ns/op is aggregate wall time per completed Fire, including publication work, not request latency.
+
+| Workers | Engine ns/op | Runtime, no publish ns/op | Publish every 1 ns/op | Every 32 ns/op | Every 1024 ns/op |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 12,075 | 11,951 | 11,993 | 12,060 | 12,048 |
+| 2 | 6,250 | 6,248 | 6,308 | 6,309 | 6,268 |
+| 4 | 3,338 | 3,339 | 3,419 | 3,343 | 3,353 |
+| 8 | 2,008 | 2,000 | 2,096 | 1,989 | 2,005 |
+| 16 | 2,000 | 2,026 | 1,995 | 2,047 | 1,999 |
+| 32 | 2,063 | 2,027 | 2,060 | 2,058 | 2,048 |
+
+These cases used 6,120 B/op and 8 allocs/op with no publications, and 6,168 B/op and 9 allocs/op when publishing every call. Infrequent publication amortizes its 48-byte object; Go's per-operation allocation counts round down. Scheduling, allocator pressure, and short-sample variation limit conclusions about scaling. More workers did not provide linear throughput growth.
+
+### Combined reload costs
+
+The [payment workload](../examples/runtime_reload/benchmark_test.go) compiles two strict JSON/CEL provider rules, adds a typed fallback and audit, and freezes one grouped snapshot. The first provider fails after recording an attempt, the second fires, the fallback is bypassed, and audit observes the selected provider. Every Fire checks the four-rule ledger, one business failure, provenance and captured identity. Core Trace is disabled for Fire measurements. Compile includes strict decoding, CEL compilation, typed parameters, group construction and engine identity, with compiler/registry setup outside timing.
+
+| Benchmark | ns/op | B/op | allocs/op |
+| --- | ---: | ---: | ---: |
+| `BenchmarkReloadCompile` | 39,394 | 45,782 | 859 |
+| `BenchmarkReloadFire/engine` | 1,600 | 1,595 | 42 |
+| `BenchmarkReloadFire/runtime` | 1,591 | 1,595 | 42 |
+| `BenchmarkReloadFire/observer` | 1,857 | 1,980 | 46 |
+| `BenchmarkReloadFire/otel_noop` | 2,130 | 2,181 | 51 |
+| `BenchmarkReloadFire/otel_limit` | 5,602 | 8,303 | 84 |
+
+Observer timing includes all 13 deliveries. OTel noop uses explicit official no-op providers. The limit case uses the SDK, a ManualReader, and a synchronous in-memory exporter, retaining two rule events and one independent limit diagnostic. The exporter resets each iteration, retaining at most one span; reset cost is included. Separate [OTel measurements](#opentelemetry-observation-measurements) distinguish API, disabled SDK, metrics, recording and exporter costs. Real provider I/O and callback latency are absent here.
+
+### Executable churn and retained metadata
+
+`BenchmarkRuntimeChurn` deliberately measures constructing and publishing a new snapshot plus one Fire, separately from steady-state Fire. Each snapshot has 16 rules, a shared 1 MiB callback capture, and about 32 KiB of unique descriptive text. The caller keeps either zero or the latest 32 Results, as well as the current Runtime. The benchmark checks every publication and execution and keeps those owners alive for profiling. Input is reset each call; no result pooling or timing threshold is used.
+
+| Benchmark | ns/op | B/op | allocs/op |
+| --- | ---: | ---: | ---: |
+| `BenchmarkRuntimeChurn/retained_results_0` | 45,175 | 1,123,645 | 130 |
+| `BenchmarkRuntimeChurn/retained_results_32` | 36,377 | 1,123,472 | 130 |
+
+Retaining Results normally retains their metadata; it must not retain obsolete callback payloads. GC pacing can change with the retained live set, so the lower short-sample time for a 32-Result window is not an optimization claim. B/op measures allocated bytes, not live memory. To inspect bounded churn, set PROFILE_DIR to an existing writable output directory and run:
+
+```sh
+go test . -run '^$' -bench '^BenchmarkRuntimeChurn/retained_results_32$' -benchtime=64x -memprofilerate=1 -memprofile="$PROFILE_DIR/churn.pprof" -o "$PROFILE_DIR/rulite.test"
+go tool pprof -top -inuse_space "$PROFILE_DIR/rulite.test" "$PROFILE_DIR/churn.pprof"
+```
+
+Use `retained_results_0` to compare without historical Results. The current Runtime intentionally retains its latest callback capture in either case. For active-call ownership, a separate bounded joint profile used 32 and 64 newly compiled CEL/dynamic/group snapshots, independent 1 MiB projection/action/input/context captures, one blocked old action, core Trace, and explicit in-memory telemetry. Channels held the old action while new snapshots were published; the final publication was empty. In both runs the live profile attributed 4 MiB to captures while the old call was blocked, and none to those captures after it returned, even while 33 or 65 Results remained held. JSON strings, dominated by descriptions, remained with those Results and disappeared after the views were released. Providers and CEL parser data can remain alive independently.
+
+These observations support the ownership graph: active execution to executable callbacks; retained Result to metadata/facts; no reverse metadata-to-callback edge. Profiles use forced collection for inspection and do not turn GC or finalizer timing into a unit-test guarantee. Caller-owned error/panic values can retain application objects. Bound Result/Trace history and provider buffers, and coordinate external resource shutdown separately from Publish.

@@ -1,0 +1,1 @@
+[{"id":"payment/primary","when":"true","action":"payment.primary/v1","params":{"provider":"unavailable"}}]

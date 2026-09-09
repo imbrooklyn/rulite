@@ -110,6 +110,16 @@ Rule event attributes are `rulite.rule.id`, `rulite.rule.priority`, `rulite.rule
 
 The SDK may independently sample out spans or drop events/attributes. Configure its limits to accommodate the adapter limit when the complete retained prefix is required. The adapter's recorded count means AddEvent calls, not confirmed SDK retention or delivery. SDK dropped-event counts and exporter diagnostics are separate. Adapter truncation never changes the complete core Result or opt-in Trace.
 
+## Combined execution and operational diagnostics
+
+The [payment reload example](../examples/runtime_reload) records Runtime executions compiled from strict JSON and CEL, with a code-owned first-fire provider group, typed fallback, and subsequent audit. It uses explicit in-memory providers and four bounded concurrent calls. A failed provider attempt remains a canonical business failure even when another provider and audit succeed. The deliberately limited span produces an independent `ErrEventLimit` diagnostic while the core Result and Trace remain complete.
+
+For operational attribution, read the captured `Result.Snapshot()` or span revision, then inspect business counts, stop reason, and failures. Use `Result.Diagnostics()` for observer delivery failures. Read exporter/provider diagnostics separately: an export error handled within the SDK cannot retroactively change a Result. Raw business error and panic values are never adapter attributes; explicit application logging must decide whether those values are safe to disclose.
+
+Concurrent executions share immutable adapter configuration and instruments, with a separate span scope per call. The [joint tests](../examples/runtime_reload/main_test.go) exercise old-version action success, error, panic and cancellation across publication, observer error/panic, event limits, and provider panic. They compare telemetry with the core ledger and successful publication identities. Provider panics can leave incomplete observation, but never add rule failures. The adapter still replaces the one Observer slot; direct Observer collection and OTel observation are separate execution choices.
+
+Use one fixed, bounded metric configuration for a provider lifetime. Changing publication revisions does not add metric series. Version allowlists and rule allowlists remain explicit, and changing those configurations repeatedly can accumulate their union. Bound provider retention and application Result history independently. Sampling or event truncation is not a substitute for managing retained Results, whose complete metadata and Trace may outlive the executable snapshot. See [ownership and measurements](benchmarks.md#snapshot-scale-and-retention).
+
 ## Failure and resource ownership
 
 Observer work stays synchronous. Fire waits for provider calls and inherits their latency/backpressure; no goroutine is started to simulate a timeout. A real context cancellation is still checked only at the next existing callback boundary. Cancellation during finish cannot revise already-final business facts. Complete core Trace duration includes synchronous observation, whereas its condition/action durations exclude observer work.

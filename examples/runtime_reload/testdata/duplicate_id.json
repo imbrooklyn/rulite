@@ -1,0 +1,4 @@
+[
+  {"id":"payment/primary","when":"true","action":"payment.primary/v1","params":{"provider":"primary/v2"}},
+  {"id":"payment/primary","when":"true","action":"payment.secondary/v1","params":{"provider":"secondary/v2"}}
+]

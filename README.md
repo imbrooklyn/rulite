@@ -100,6 +100,8 @@ Use `NewRuntime(engine)` to publish a complete immutable engine. Build and valid
 
 ## Local selection groups
 
+The [payment reload example](examples/runtime_reload) combines strict JSON definitions, CEL conditions, a code-owned provider group, typed fallback and audit, concurrent Runtime calls, and in-memory OpenTelemetry. `dynamic.CompileRules` allows this composition before final `CompileEntries`; it adds no JSON group schema. Source acquisition and the decision to publish stay with the application. Retaining a Result keeps its metadata and partial outcomes; resource owners must keep old callbacks' external resources available until those calls finish.
+
 Use `FirstMatchGroup(id, members...)` for one eligible rule or `FirstFireGroup(id, members...)` for provider fallback. Both return immutable `Group[T]` values. Assemble mixed definitions with `CompileEntries(providers.Entry(), audit.Entry())`, then use `NewEngineFromRuleSet(set)`. The [compiling payment example](group_example_test.go) selects a provider and runs the following audit rule in the same Fire.
 
 Top-level rules and groups sort by priority descending, then registration order. Members sort independently inside each group. Group priority defaults to zero; `WithPriority` sets it explicitly without inspecting member priorities. RuleID is unique across the whole set; GroupID follows the same syntax in an independent namespace. Empty groups are valid and exhaust without selecting a rule.
@@ -129,6 +131,7 @@ go run ./examples/risk_decision
 go run ./examples/cel_pricing
 go run ./examples/dynamic_pricing
 go run ./examples/observability
+go run ./examples/runtime_reload
 go test ./...
 ```
 
@@ -138,6 +141,7 @@ go test ./...
 - [CEL pricing](examples/cel_pricing): compile typed bindings, optional coupon presence, and a trusted amount check once; Go actions and a Go audit condition observe sequential mutations.
 - [Dynamic pricing](examples/dynamic_pricing): strict JSON definitions select explicit typed discount, cap, and audit capabilities; compilation produces an ordinary immutable rule set.
 - [Observability](examples/observability): explicit in-memory providers record Runtime execution identity, metrics, and bounded rule events without a network exporter.
+- [Payment reload](examples/runtime_reload): validated JSON replacement, CEL provider eligibility, typed audit, partial provider failure, and a separate trace-limit diagnostic. Snapshot identity records the execution source; `AppliedBy` records the field writer.
 
 ## Scope and documentation
 

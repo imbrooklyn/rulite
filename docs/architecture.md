@@ -45,6 +45,8 @@ Normalization and defensive ownership happen immediately in the immutable builde
 
 ## Ordered execution
 
+The [combined payment example](../examples/runtime_reload) constructs one snapshot from strict JSON, CEL conditions, a provider group, typed fallback, and typed audit. `dynamic.CompileRules` returns immutable public rules in registration order for this construction; `CompileEntries` remains the final validation, sorting, and indexing boundary across the whole composition. It does not expose compiled callbacks, infer groups from JSON, or execute a nested engine to combine results.
+
 `Fire` evaluates a rule's condition, immediately attempts its action if matched, then proceeds according to policy. Every callback runs sequentially within that execution. Later conditions observe earlier action mutations, including partial changes made before failure.
 
 Conditions must not mutate input; Go cannot enforce this read-only contract. A condition error takes precedence over its boolean return. Actions may mutate state and perform external effects. Rulite provides no transaction, rollback, retry, or compensation. Repeating `Fire` can repeat effects; idempotency belongs to the application.
@@ -209,6 +211,8 @@ A shared RuleSet supports concurrent metadata reads and engine construction. A s
 Sharing one mutable input requires caller synchronization around the whole Fire call, including conditions and actions, and around other accesses to that input. Engine does not lock by input address, clone input, or serialize separate executions automatically.
 
 ## Performance and scope
+
+Operational ownership follows the same separation: Runtime owns the current publication; an active Fire holds its captured executable snapshot; completed views hold independent metadata and facts. Keeping many historical Results can retain substantial metadata and complete Trace storage. Applications bound that history and keep captured external resources alive through active callbacks. Publication is neither a transaction nor a drain signal. [Runtime operations](runtime.md#reloading-grouped-definitions) and [telemetry boundaries](observability.md#combined-execution-and-operational-diagnostics) describe failure handling across the integrations.
 
 Validation, ordering, normalization, and indexing belong to construction. Fire uses the frozen order. With Trace off, the core execution loop reads no duration clock. Explicit observer implementations may provide their own timing. Ordinary all-miss executions use a sparse ledger without a heap object per rule; matched and failed outcomes retain the records needed for correctness. Explain rendering is on demand. Results are not backed by buffers that will be reused by another execution. See the [measured baseline](benchmarks.md).
 

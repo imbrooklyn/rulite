@@ -1,0 +1,4 @@
+[
+  {"id":"payment/primary","priority":100,"when":"input.AmountMinor > 0","action":"payment.primary/v1","params":{"provider":"primary/v1"}},
+  {"id":"payment/secondary","priority":50,"when":"size(input.Attempts) == 1","action":"payment.secondary/v1","params":{"provider":"secondary/v1"}}
+]

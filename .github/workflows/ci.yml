@@ -53,6 +53,7 @@ jobs:
             go test ./dynamic -run '^$' -fuzz "^${target}$" -fuzztime=5s -parallel=2 || exit 1
           done
           go test ./otel -run '^$' -fuzz '^FuzzTelemetryProjection$' -fuzztime=5s -parallel=2
+          go test ./examples/runtime_reload -run '^$' -fuzz '^FuzzReloadPublications$' -fuzztime=5s -parallel=2
 
   benchmarks:
     runs-on: ubuntu-latest
@@ -101,7 +102,8 @@ jobs:
           REPORT_DIR: ${{ runner.temp }}/benchmark-results
         shell: bash
         run: |
-          go test . -run '^$' -bench '^(BenchmarkSnapshotFire|BenchmarkRuntimePublish|BenchmarkRuntimeConcurrentSwap)$' -benchmem -benchtime=100ms -count=3 > "$REPORT_DIR/runtime-benchmarks.txt"
+          go test . -run '^$' -bench '^(BenchmarkSnapshotFire|BenchmarkRuntimePublish|BenchmarkRuntimeConcurrentSwap|BenchmarkRuntimeSwapScale|BenchmarkRuntimeChurn)$' -benchmem -benchtime=100ms -count=3 > "$REPORT_DIR/runtime-benchmarks.txt"
+          go test ./examples/runtime_reload -run '^$' -bench . -benchmem -benchtime=100ms -count=3 > "$REPORT_DIR/reload-benchmarks.txt"
       - name: Dynamic construction and runtime samples
         working-directory: candidate
         env:

@@ -65,6 +65,14 @@ JSON bytes -> strict Decode -> schema and root ID validation
 
 After field and limit checks, ID syntax and duplicates use the root's canonical validation. All conditions compile in original registration order before any action parameter validator runs. Actions then resolve and validate in that order; the first condition or action error stops construction. No partial set or action execution is published. Earlier validators may already have run when a later action fails; validators must be read-only.
 
+## Composition with typed groups
+
+`CompileRules(definitions, conditions, actions) ([]rulite.Rule[T], error)` applies the same validation, DTO ownership, CEL compilation, and frozen action resolution as `Compile`. It returns ordinary immutable rules in original registration order. It returns nil on failure, never a partial list. An empty list still requires a valid compiler and frozen registry. Use `Decode` first when reading JSON transport.
+
+Pass these rules to code-owned `FirstMatchGroup` or `FirstFireGroup`, combine them with ordinary typed rules, and call `rulite.CompileEntries` to validate the complete composition and freeze ordering and indexes. That final validation catches duplicate IDs across separately compiled lists, typed rules, and groups. The caller owns the returned slice; changing it or the DTOs later does not change already constructed groups or sets. Rules still share read-only parameters and caller-owned callback captures.
+
+This is a construction path, with no callback extraction from an existing RuleSet and no group fields in Definition JSON. The [payment reload example](../examples/runtime_reload/main.go) uses it to combine CEL provider eligibility with a typed fallback and audit in one execution ledger, then publishes the finished engine. `Compile` and `CompileJSON` remain the complete flat-RuleSet convenience paths and retain their existing validation order and errors.
+
 ## Canonical JSON schema
 
 The transport is one JSON array. The empty array is valid. Each object has only these exact, case-sensitive names:

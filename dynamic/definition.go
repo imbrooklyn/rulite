@@ -65,7 +65,11 @@ func CompileJSON[T any](source []byte, conditions *cel.Compiler[T], actions *Reg
 	if err != nil {
 		return nil, err
 	}
-	return compileValidated(definitions, conditions, capabilities)
+	rules, err := compileValidated(definitions, conditions, capabilities)
+	if err != nil {
+		return nil, err
+	}
+	return rulite.Compile(rules...)
 }
 
 // Compile snapshots mutable DTO storage and compiles an ordinary RuleSet.
@@ -76,6 +80,28 @@ func CompileJSON[T any](source []byte, conditions *cel.Compiler[T], actions *Reg
 // Callers must not mutate definitions while this call copies them. Later edits
 // to definitions, tags or raw parameters cannot change the compiled set.
 func Compile[T any](definitions []Definition, conditions *cel.Compiler[T], actions *Registry[T]) (*rulite.RuleSet[T], error) {
+	rules, err := CompileRules(definitions, conditions, actions)
+	if err != nil {
+		return nil, err
+	}
+	return rulite.Compile(rules...)
+}
+
+// CompileRules validates and snapshots definitions, compiles all CEL conditions,
+// and resolves frozen typed actions using the same construction contract as
+// Compile. It returns ordinary immutable rules in original registration order,
+// before execution sorting or group assignment. Failure returns nil, never a
+// partial list; an empty list still requires a valid compiler and frozen registry.
+//
+// Callers own the returned slice and may compose its rules with typed rules and
+// selection groups using rulite.Compile or rulite.CompileEntries. That final
+// construction validates identities across all combined rules and groups and
+// freezes execution order. This does not extract callbacks from a compiled set
+// or add group fields to the JSON schema. Use Decode first for strict transport.
+// Later DTO or returned slice edits do not change already constructed groups or
+// sets. Callback captures and shared nested action parameters remain read-only
+// or caller-synchronized as documented by Registry.
+func CompileRules[T any](definitions []Definition, conditions *cel.Compiler[T], actions *Registry[T]) ([]rulite.Rule[T], error) {
 	capabilities, err := actions.snapshot()
 	if err != nil {
 		return nil, err
@@ -142,7 +168,7 @@ func validateDefinitions(definitions []Definition) error {
 	return nil
 }
 
-func compileValidated[T any](definitions []Definition, compiler *cel.Compiler[T], capabilities map[string]actionFactory[T]) (*rulite.RuleSet[T], error) {
+func compileValidated[T any](definitions []Definition, compiler *cel.Compiler[T], capabilities map[string]actionFactory[T]) ([]rulite.Rule[T], error) {
 	checks := make([]rulite.Condition[T], len(definitions))
 	if len(definitions) == 0 {
 		// Validate even an empty construction through the compiler's public contract.
@@ -169,5 +195,5 @@ func compileValidated[T any](definitions []Definition, compiler *cel.Compiler[T]
 		}
 		rules[i] = rulite.NewRule[T](d.ID).Priority(d.Priority).Description(d.Description).Tags(d.Tags...).When(checks[i]).Then(action)
 	}
-	return rulite.Compile(rules...)
+	return rules, nil
 }

@@ -48,6 +48,25 @@ Output is `20 pricing/v2 2`. The [external-package example](../runtime_example_t
 
 For [dynamic definitions](dynamic-rules.md), the caller acquires source bytes, calls `dynamic.CompileJSON`, assigns identity with `set.WithIdentity`, constructs an engine with `NewEngineFromRuleSet`, then calls `Publish`. Return any acquisition, decoding, compilation, validation, or engine-option error before Publish. The current engine remains usable throughout this work and after failure. Runtime accepts only a complete engine, never source bytes, individual rules, or a mutable configuration DTO. Source authenticity, digest calculation, acquisition limits, retry policy, and deciding when to reload belong to the caller.
 
+## Reloading grouped definitions
+
+The [payment reload example](../examples/runtime_reload) loads local JSON through `dynamic.Decode` and `dynamic.CompileRules`, combines the returned rules with a typed fallback in a provider group and a subsequent typed audit, then calls `CompileEntries`, `WithIdentity`, `NewEngineFromRuleSet`, and `Publish`. Group layout and typed behavior are application code; the strict Definition schema remains flat. CEL conditions read preceding action mutations within the same pass. No configuration acquisition service or watcher is involved.
+
+```sh
+go run ./examples/runtime_reload
+go test -race ./examples/runtime_reload -run '^(TestReloadOldActionOutcomes|TestReloadConcurrentPublicationsAndViews|TestCallerSynchronizesReloadInput)$' -count=10 -timeout=120s
+```
+
+| Boundary | Available behavior |
+| --- | --- |
+| JSON syntax/schema, CEL syntax/type, unknown action, duplicate ID, or parameter validation failure | No engine is published; the complete current snapshot remains available and its revision is unchanged. |
+| Old action returns nil after publication | Old Result retains its fired outcome, old version/revision, and any following audit from the old snapshot. |
+| Old action returns an error or panics | Its partial mutations and canonical failure remain associated with the old snapshot; policy determines continuation, with recovered panic always terminal. |
+| Context is canceled during an old callback | Fire waits for the callback boundary, retains the actual action outcome and context cause, and reports the captured old identity. |
+| Observer or telemetry delivery fails | Independent diagnostics can truncate observation; they cannot turn a telemetry fault into a rule failure or change selection. |
+
+The example uses local provider stubs. A failed provider attempt remains visible when fallback succeeds; it could already have performed an external effect in a real application. There is no automatic transaction, retry, rollback, or compensation. `AppliedBy` identifies the final field writer, while snapshot identity identifies execution source. A successful action may preserve an existing field value and its earlier attribution.
+
 ## API and initial state
 
 ```go
@@ -94,7 +113,9 @@ Runtime holds only its current executable publication. Active executions and oth
 
 Runtime starts no goroutines, watchers, or external resources, so it has no Close method. It does not close resources captured by callbacks after publication. Callers keep those resources usable for active executions and coordinate their shutdown themselves; publication is not a drain notification. Garbage collection timing is not an API guarantee.
 
-No duration clock is read without a trace consumer, and ordinary no-trace/no-observer all-miss Fire keeps the sparse allocation contract. See [measurements](benchmarks.md#runtime-snapshot-measurements) for direct Engine, Runtime, publication, and concurrent swap costs.
+The core reads no duration clock with Trace disabled, and ordinary no-trace/no-observer all-miss Fire keeps the sparse allocation contract. An explicitly configured Observer or enabled OTel duration histogram can measure its own interval. See [scale, swap and retention measurements](benchmarks.md#snapshot-scale-and-retention) for direct Engine, Runtime, publication, and resource costs.
+
+Retaining Results from many distinct snapshots normally retains their descriptive metadata and execution facts. It does not keep their executable closures alive. Bound application history and trace retention separately from publication rate; Core Trace is complete and can retain every rule's timing storage. Root identity strings are opaque and unbounded, so callers should choose reasonable sizes. The provider owner separately bounds telemetry buffering and export storage. Collection of Go objects never closes a socket, drains a provider, or cancels an active callback on the caller's behalf.
 
 ## Scope
 
