@@ -9,7 +9,7 @@ import (
 )
 
 func BenchmarkFireGroups(b *testing.B) {
-	for _, size := range []int{10, 1000} {
+	for _, size := range []int{10, 100, 1000, 10000} {
 		for _, kind := range []rulite.GroupKind{rulite.GroupFirstMatch, rulite.GroupFirstFire} {
 			for _, scenario := range []string{"start", "middle", "end", "all_miss", "action_error"} {
 				b.Run(fmt.Sprintf("%s/%s/members_%d", kind, scenario, size), func(b *testing.B) {
@@ -78,29 +78,34 @@ func BenchmarkFireGroups(b *testing.B) {
 }
 
 func BenchmarkCompileEntries(b *testing.B) {
-	for _, groups := range []int{1, 10, 100} {
-		b.Run(fmt.Sprintf("groups_%d/rules_1000", groups), func(b *testing.B) {
-			rules := metadataBenchmarkRules(1000)
-			entries := make([]rulite.Entry[benchmarkInput], groups)
-			for i := range entries {
-				entries[i] = rulite.FirstFireGroup(rulite.GroupID(fmt.Sprintf("group/%d", i)), rules[i*1000/groups:(i+1)*1000/groups]...).WithPriority(rulite.Priority(i % 3)).Entry()
+	for _, size := range []int{10, 100, 1000, 10000} {
+		for _, groups := range []int{1, 10, 100} {
+			if groups > size {
+				continue
 			}
-			var set *rulite.RuleSet[benchmarkInput]
-			var err error
-			b.ReportAllocs()
-			for b.Loop() {
-				set, err = rulite.CompileEntries(entries...)
-				if err != nil || set.Len() != 1000 {
-					b.Fatal("incomplete grouped compilation")
+			b.Run(fmt.Sprintf("groups_%d/rules_%d", groups, size), func(b *testing.B) {
+				rules := metadataBenchmarkRules(size)
+				entries := make([]rulite.Entry[benchmarkInput], groups)
+				for i := range entries {
+					entries[i] = rulite.FirstFireGroup(rulite.GroupID(fmt.Sprintf("group/%d", i)), rules[i*size/groups:(i+1)*size/groups]...).WithPriority(rulite.Priority(i % 3)).Entry()
 				}
-			}
-			benchmarkSet = set
-			input := benchmarkInput{}
-			result, err := mustReuse(b, set).Fire(context.Background(), &input)
-			if err != nil || result.Counts().Fired != groups || result.Evaluated() != groups || input.actions != groups {
-				b.Fatal("compiled group selection changed")
-			}
-			checkResultConsistency(b, result)
-		})
+				var set *rulite.RuleSet[benchmarkInput]
+				var err error
+				b.ReportAllocs()
+				for b.Loop() {
+					set, err = rulite.CompileEntries(entries...)
+					if err != nil || set.Len() != size {
+						b.Fatal("incomplete grouped compilation")
+					}
+				}
+				benchmarkSet = set
+				input := benchmarkInput{}
+				result, err := mustReuse(b, set).Fire(context.Background(), &input)
+				if err != nil || result.Counts().Fired != groups || result.Evaluated() != groups || input.actions != groups {
+					b.Fatal("compiled group selection changed")
+				}
+				checkResultConsistency(b, result)
+			})
+		}
 	}
 }

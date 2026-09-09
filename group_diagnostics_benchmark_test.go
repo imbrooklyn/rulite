@@ -62,7 +62,7 @@ func groupDiagnosticWorkload(b *testing.B, groups, members int, kind rulite.Grou
 }
 
 func BenchmarkGroupDiagnostics(b *testing.B) {
-	for _, shape := range [][2]int{{1, 10}, {1, 1000}, {10, 100}} {
+	for _, shape := range [][2]int{{1, 10}, {1, 1000}, {10, 100}, {10, 1000}, {100, 100}} {
 		groups, members := shape[0], shape[1]
 		for _, kind := range []rulite.GroupKind{rulite.GroupFirstMatch, rulite.GroupFirstFire} {
 			for _, scenario := range []string{"start", "middle", "end", "all_miss", "fallback"} {

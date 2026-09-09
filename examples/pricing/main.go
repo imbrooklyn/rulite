@@ -1,4 +1,4 @@
-// Pricing selects the best eligible discount and records its business provenance.
+// Pricing selects the highest-priority eligible offer and records field provenance.
 package main
 
 import (
@@ -15,6 +15,10 @@ type Price struct {
 	TotalCents                int64
 	Discount                  int
 	AppliedBy                 rulite.RuleID
+	// MaxDiscount optionally caps the selected or preexisting discount; zero means no cap.
+	MaxDiscount int
+	// Audit records the final discount and its field writer after local selection.
+	Audit string
 }
 
 func pricingEngine() (*rulite.Engine[Price], error) {
@@ -37,7 +41,24 @@ func pricingEngine() (*rulite.Engine[Price], error) {
 			func(_ context.Context, p *Price) (bool, error) { return p.Currency == "EUR", nil },
 		),
 	), 15)
-	return rulite.NewEngine(highValue, newcomer, vip)
+	offers := rulite.FirstMatchGroup("pricing/offers", highValue, newcomer, vip).WithPriority(100)
+	capDiscount := rulite.NewRule[Price]("pricing/cap").When(rulite.All(notBlocked,
+		func(_ context.Context, p *Price) (bool, error) {
+			return p.MaxDiscount > 0 && p.Discount > p.MaxDiscount, nil
+		},
+	)).Then(func(_ context.Context, p *Price) error {
+		p.Discount, p.AppliedBy = p.MaxDiscount, "pricing/cap"
+		return nil
+	})
+	audit := rulite.NewRule[Price]("pricing/audit").Priority(-100).When(notBlocked).Then(func(_ context.Context, p *Price) error {
+		p.Audit = fmt.Sprintf("Discount: %d%%; applied by: %s", p.Discount, p.AppliedBy)
+		return nil
+	})
+	set, err := rulite.CompileEntries(audit.Entry(), capDiscount.Entry(), offers.Entry())
+	if err != nil {
+		return nil, err
+	}
+	return rulite.NewEngineFromRuleSet(set)
 }
 
 func main() {
@@ -45,12 +66,15 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	price := Price{VIP: true, NewCustomer: true, Currency: "USD", TotalCents: 120_000}
+	price := Price{VIP: true, NewCustomer: true, Currency: "USD", TotalCents: 120_000, MaxDiscount: 15}
 	result, err := engine.Fire(context.Background(), &price)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("Discount: %d%%; applied by: %s\n", price.Discount, price.AppliedBy)
+	group, _ := result.Group("pricing/offers")
+	selected, _ := group.SelectedRule()
+	fmt.Printf("Selected offer: %s\n", selected)
+	fmt.Println(price.Audit)
 	fmt.Printf("Successful actions: %v\n", result.Fired())
 	fmt.Print(result.Explain())
 }

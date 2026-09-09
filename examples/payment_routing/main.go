@@ -37,15 +37,18 @@ func routingEngine() (*rulite.Engine[Payment], error) {
 	paypal := provider("paypal", 60, func(_ context.Context, p *Payment) (bool, error) { return p.Wallet, nil })
 	bank := provider("bank-transfer", 0, func(_ context.Context, p *Payment) (bool, error) { return p.Bank, nil })
 	audit := rulite.NewRule[Payment]("payment/audit").Priority(-100).When(func(_ context.Context, p *Payment) (bool, error) { return p.Provider != "", nil }).Then(func(_ context.Context, p *Payment) error { p.Audited = true; return nil })
-	return rulite.NewEngine(bank, paypal, adyen, stripe, audit)
+	providers := rulite.FirstFireGroup("payment/providers", bank, paypal, adyen, stripe)
+	set, err := rulite.CompileEntries(audit.Entry(), providers.Entry())
+	if err != nil {
+		return nil, err
+	}
+	return rulite.NewEngineFromRuleSet(set,
+		rulite.WithPolicy(rulite.DefaultPolicy().WithActionErrors(rulite.ContinueOnError)))
 }
 
 func route(ctx context.Context, engine *rulite.Engine[Payment], payment *Payment) (rulite.Result, error) {
-	// This example uses global selection, which stops before the audit rule.
-	// For an audit within the same Fire, use FirstFireGroup with CompileEntries
-	// and retain EvaluateAll as the global stop mode.
-	policy := rulite.DefaultPolicy().WithStop(rulite.StopOnFirstFire).WithActionErrors(rulite.ContinueOnError)
-	return engine.Fire(ctx, payment, rulite.WithPolicy(policy))
+	// Local provider selection leaves EvaluateAll free to reach the audit rule.
+	return engine.Fire(ctx, payment)
 }
 
 func main() {
@@ -60,6 +63,9 @@ func main() {
 	if err != nil {
 		fmt.Printf("Observed errors: %v\n", err)
 	}
-	fmt.Printf("Selected provider: %s; attempts: %v; audit rule fired: %t\n", payment.Provider, payment.Attempts, payment.Audited)
+	group, _ := result.Group("payment/providers")
+	audit, _ := result.Rule("payment/audit")
+	fmt.Printf("Selected provider: %s; attempts: %v; audit rule fired: %t\n", payment.Provider, payment.Attempts, audit.Fired())
+	fmt.Printf("Provider group: %s; execution: %s\n", group.EndReason(), result.StopReason())
 	fmt.Print(result.Explain())
 }

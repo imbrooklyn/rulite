@@ -61,7 +61,7 @@ Each condition runs immediately before its matched action. **Conditions must onl
 
 A rule is **Matched** only when its condition returns `true, nil`, and **Fired** only when its action returns `nil`. Fired does not prove a field was changed. For field attribution, record business provenance such as `AppliedBy rulite.RuleID`; see [pricing](examples/pricing).
 
-The default policy evaluates all rules and stops on either phase's first error. For provider fallback:
+The default policy uses `EvaluateAll` with both phases set to `StopOnError`. For global provider selection:
 
 ```go
 policy := rulite.DefaultPolicy().
@@ -121,13 +121,13 @@ go run ./examples/risk_decision
 go test ./...
 ```
 
-- [Pricing](examples/pricing): VIP, new-customer, and high-value offers with field provenance.
-- [Payment routing](examples/payment_routing): Stripe, Adyen, PayPal, and bank-transfer fallback using local provider stubs.
+- [Pricing](examples/pricing): `FirstMatchGroup` selects one eligible offer; a later cap and audit preserve final field provenance through `AppliedBy`.
+- [Payment routing](examples/payment_routing): `FirstFireGroup` tries Stripe, Adyen, PayPal, and bank-transfer stubs, then continues to audit under `EvaluateAll`.
 - [Risk decision](examples/risk_decision): allow, review, reject, nested conditions, Trace, and a conservative default when evidence fails.
 
 ## Scope and documentation
 
-Rulite provides typed rules, immutable RuleSet/Compile and engines, descriptive metadata, indexed validation issues, deterministic single-pass execution, policies, Result, Explain, opt-in Trace, synchronous observation, and isolated diagnostics. v0.3 first-match/first-fire groups, mixed entry compilation, hierarchical explanations, group end reasons, and ordered resolution/completion events are available. Broader business examples remain planned. CI checks structural performance guarantees and records repeatable benchmark comparisons. CEL, dynamic definitions, hot reload, and telemetry integration are not implemented. A separate CEL Condition adapter is a required v0.4 deliverable.
+Rulite provides typed rules, immutable RuleSet/Compile and engines, descriptive metadata, indexed validation issues, deterministic single-pass execution, policies, Result, Explain, opt-in Trace, synchronous observation, and isolated diagnostics. v0.3 first-match/first-fire groups, mixed entry compilation, hierarchical explanations, group end reasons, ordered resolution/completion events, and runnable payment/pricing examples are available. CI checks structural performance guarantees and records repeatable benchmark comparisons. CEL, dynamic definitions, hot reload, and telemetry integration are not implemented. A separate CEL Condition adapter is a required v0.4 deliverable.
 
 Read [architecture and non-goals](docs/architecture.md), the [roadmap](docs/roadmap.md), [benchmark methodology and baseline](docs/benchmarks.md), and [contributing](CONTRIBUTING.md). Later version goals are plans, not available APIs. Rulite does not replace all conditionals or provide inference, a rule language, workflow orchestration, or automatic rollback.
 

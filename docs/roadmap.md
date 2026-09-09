@@ -1,12 +1,12 @@
 # Roadmap
 
-Rulite is a typed, deterministic, single-pass business rules engine. The v0.1 core and v0.2 RuleSet/Compile, metadata, reusable engine construction, indexed validation queries, synchronous Observer/events, isolated Result diagnostics, and benchmark regression automation are implemented. v0.3 first-match/first-fire groups, mixed entry compilation, hierarchical explanations, group end reasons, and ordered resolution/completion events are also available. Broader business examples remain planned. Later rows describe version goals, not release dates or available APIs.
+Rulite is a typed, deterministic, single-pass business rules engine. The v0.1 core and v0.2 RuleSet/Compile, metadata, reusable engine construction, indexed validation queries, synchronous Observer/events, isolated Result diagnostics, and benchmark regression automation are implemented. v0.3 first-match/first-fire groups, mixed entry compilation, hierarchical explanations, group end reasons, ordered resolution/completion events, and payment/pricing examples are implemented. Versions after v0.3 describe future goals, not release dates or available APIs.
 
 | Version | Goals | Explicit boundaries |
 | --- | --- | --- |
 | v0.1 | Typed Rule/Condition/Action, staged builder, immutable Engine, priority and registration order, All/Any/Not, execution policies, Result/Explain, opt-in Trace, errors, context, panic handling, concurrency tests, benchmarks, and examples | No public RuleSet/Compile, Observer, groups, CEL, dynamic definitions, reload, or telemetry adapter |
 | v0.2 | Public RuleSet/Compile, metadata, observation-only Observer/events, isolated diagnostics, structural performance gates, and repeatable benchmark artifacts | No public CEL adapter, groups, or reload |
-| v0.3 | First-match and first-fire groups with local resolution and group explanations | No Agenda or activation model; global policy still controls execution |
+| v0.3 | First-match and first-fire groups, local resolution, ordered diagnostics, and payment/pricing examples with subsequent audit rules | No Agenda or activation model; global policy still controls execution |
 | v0.4 | `rulite/cel` Condition adapter; later, dynamic definitions and an explicit typed action registry | No CEL actions, arbitrary scripts, or BRMS; root runtime remains independent of CEL |
 | v0.5 | Atomic snapshot replacement, version/revision metadata, diagnostics, and an optional OpenTelemetry adapter | No distributed control plane or mutation of an active engine snapshot |
 | v1.0 | Stable core and integration contracts supported by compatibility tests and production feedback | Forward chaining, Rete, and workflow orchestration are not prerequisites |

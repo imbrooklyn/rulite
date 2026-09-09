@@ -377,6 +377,61 @@ No-group all-miss still has zero allocations. Group end facts fit in the existin
 
 Trace retains a complete view of all definitions, including uncalled members; that storage can be substantial even when selection happens immediately. Text explanations allocate considerably more than structural views and are intended for on-demand inspection. Results and event snapshots retain their outcomes without pooling; execution reads duration clocks only when Trace is enabled. Short timing differences from the preceding samples do not prove equivalent CPU cost; the allocation and callback-free ownership gates remain the regression criteria.
 
+## Group scale and business decision costs
+
+A full sample on 2026-09-09 used the same Apple M4 Pro, macOS 26.5.2 (25F84), Go 1.27.0, darwin/arm64, and default GOMAXPROCS 12 described above. All 380 workloads ran three times at 100 ms each without race instrumentation. These are per-metric medians from that run:
+
+```sh
+go test . -run '^$' -bench . -benchmem -benchtime=100ms -count=3
+```
+
+[Group execution and compilation](../group_benchmark_test.go) cover 10, 100, 1,000, and 10,000 members, both group kinds, and success at the start, middle, or end, all misses, and a failed action. First-match resolves on that failed action; first-fire falls back to the next successful action. Compilation distributes 10-10,000 rules across 1, 10, or 100 groups where the total permits it.
+
+[Group diagnostics](../group_diagnostics_benchmark_test.go) additionally cover 10 groups of 1,000 members and 100 groups of 100 members. Each group independently exercises the named scenario; the member count is per group. Summary, Trace, Observer, and Trace with Observer use the same definitions. Fire uses a prebuilt engine and resets input and event counters per iteration, with outcome checks and allocation reporting. CompileEntries is timed separately. GroupViews reads an already completed Result, copying all members for entries, rendering all rules for text, or copying Trace collections.
+
+| Benchmark | ns/op | B/op | allocs/op |
+| --- | ---: | ---: | ---: |
+| `BenchmarkFireScale/all_miss/rules_10` | 155.000 | 0 | 0 |
+| `BenchmarkFireScale/all_miss/rules_100` | 1,022.000 | 0 | 0 |
+| `BenchmarkFireScale/all_miss/rules_1000` | 9,852.000 | 0 | 0 |
+| `BenchmarkFireScale/all_miss/rules_10000` | 98,866.000 | 0 | 0 |
+| `BenchmarkFireGroups/first-fire/start/members_10` | 147.800 | 104 | 3 |
+| `BenchmarkFireGroups/first-fire/start/members_100` | 146.400 | 104 | 3 |
+| `BenchmarkFireGroups/first-fire/start/members_1000` | 146.700 | 104 | 3 |
+| `BenchmarkFireGroups/first-fire/start/members_10000` | 146.700 | 104 | 3 |
+| `BenchmarkCompileEntries/groups_1/rules_10` | 1,102.000 | 2,056 | 14 |
+| `BenchmarkCompileEntries/groups_10/rules_100` | 10,058.000 | 16,936 | 23 |
+| `BenchmarkCompileEntries/groups_10/rules_1000` | 151,678.000 | 192,600 | 34 |
+| `BenchmarkCompileEntries/groups_100/rules_10000` | 1,474,410.000 | 1,698,329 | 93 |
+| `BenchmarkGroupDiagnostics/first-fire/start/summary/groups_10/members_1000` | 516.000 | 1,064 | 6 |
+| `BenchmarkGroupDiagnostics/first-fire/middle/summary/groups_10/members_1000` | 51,246.000 | 1,064 | 6 |
+| `BenchmarkGroupDiagnostics/first-fire/end/summary/groups_10/members_1000` | 101,657.000 | 1,064 | 6 |
+| `BenchmarkGroupDiagnostics/first-fire/all_miss/summary/groups_10/members_1000` | 101,137.000 | 344 | 2 |
+| `BenchmarkGroupDiagnostics/first-fire/fallback/summary/groups_10/members_1000` | 1,431.000 | 4,472 | 28 |
+| `BenchmarkGroupDiagnostics/first-fire/start/trace/groups_10/members_1000` | 72,392.000 | 969,512 | 30 |
+| `BenchmarkGroupDiagnostics/first-fire/start/observer/groups_10/members_1000` | 1,647.000 | 3,176 | 28 |
+| `BenchmarkGroupDiagnostics/first-fire/fallback/trace_observer/groups_10/members_1000` | 71,636.000 | 976,632 | 94 |
+| `BenchmarkGroupDiagnostics/first-fire/start/summary/groups_100/members_100` | 3,546.000 | 9,576 | 9 |
+| `BenchmarkGroupDiagnostics/first-fire/all_miss/summary/groups_100/members_100` | 102,571.000 | 3,480 | 2 |
+| `BenchmarkGroupDiagnostics/first-fire/fallback/summary/groups_100/members_100` | 10,560.000 | 40,728 | 127 |
+| `BenchmarkGroupViews/entries/groups_10/members_100` | 26,633.000 | 146,432 | 11 |
+| `BenchmarkGroupViews/text/groups_10/members_100` | 562,994.000 | 1,305,106 | 7,834 |
+| `BenchmarkGroupViews/trace/groups_10/members_100` | 36,103.000 | 238,592 | 2 |
+
+A single immediately resolved group still costs 104 B/op and three allocations across 10-10,000 members. Summary stores group facts and sparse evaluated outcomes without a record per uncalled member. More groups require more records: ten immediately resolved groups use 1,064 bytes; 100 use 9,576 bytes. These outcomes still explain every local hole. First-fire fallback retains the failed attempt as well as the successful action.
+
+Trace retains all 10,000 member definitions even when ten successful actions resolve ten groups immediately: the sampled start case uses 969,512 B/op. Normal observation adds group snapshots and execution summaries; the corresponding observer-only case uses 3,176 B/op. Full text formatting remains an on-demand cost. None of these measurements represents payment provider latency or a business service budget.
+
+A separate six-pair comparison with the preceding grouped runtime covered 36 common workloads and explicitly recorded 28 new scale workloads. It alternated baseline/candidate order using the method above:
+
+```sh
+python3 scripts/benchmarks.py /tmp/rulite-group-comparison \
+  --baseline /path/to/baseline-checkout --samples 6 --benchtime 100ms \
+  --bench '^(BenchmarkFireScale|BenchmarkFireGroups|BenchmarkCompileEntries|BenchmarkExplainOnDemand)$'
+```
+
+No common workload crossed the advisory threshold. The three common CompileEntries workloads had paired median ratios of 1.096-1.146, so the result does not establish equal CPU cost. Timing remains advisory, and this focused comparison does not cover every diagnostic workload. The full allocation and ownership gates also passed; no-group all-miss remained at zero allocations at all four scales.
+
 ## Structural performance guarantees
 
 Ordinary no-trace, no-observer all-miss Fire measured 0 B/op and 0 allocs/op at every tested scale. The allocation regression test also checks that allocation does not grow with rule count and that no per-rule outcome records are created for misses. This guarantee concerns framework execution storage; caller callbacks and contexts may allocate.
