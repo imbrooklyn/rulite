@@ -32,6 +32,12 @@ jobs:
         run: go test ./...
       - name: Race
         run: go test -race ./...
+      - name: Dependency boundaries
+        shell: bash
+        run: |
+          deps=$(go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' github.com/imbrooklyn/rulite)
+          test "$deps" = github.com/imbrooklyn/rulite
+          go mod verify
       - name: Benchmark tooling tests
         run: python3 -B -m unittest discover -s scripts -p 'test_*.py'
       - name: Fuzz smoke
@@ -39,6 +45,9 @@ jobs:
         run: |
           for target in FuzzCompileMetadata FuzzRuleValidation FuzzExecutionOutcomes FuzzCombinatorNesting FuzzExecutionErrorTree FuzzObservationStream FuzzGroupExecution; do
             go test . -run '^$' -fuzz "^${target}$" -fuzztime=5s -parallel=2 || exit 1
+          done
+          for target in FuzzNativeComparison FuzzBoundedCompile; do
+            go test ./cel -run '^$' -fuzz "^${target}$" -fuzztime=5s -parallel=2 || exit 1
           done
 
   benchmarks:
@@ -75,6 +84,13 @@ jobs:
             options+=(--baseline "$BASELINE_DIR")
           fi
           python3 -B scripts/benchmarks.py "$REPORT_DIR" --samples 6 --benchtime 100ms "${options[@]}"
+      - name: CEL compile and evaluation samples
+        working-directory: candidate
+        env:
+          REPORT_DIR: ${{ runner.temp }}/benchmark-results
+        shell: bash
+        run: |
+          go test ./cel -run '^$' -bench . -benchmem -benchtime=100ms -count=3 > "$REPORT_DIR/cel-benchmarks.txt"
       - name: Upload benchmark samples and comparison
         if: always()
         uses: actions/upload-artifact@v7

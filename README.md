@@ -118,16 +118,18 @@ From a checkout:
 go run ./examples/pricing
 go run ./examples/payment_routing
 go run ./examples/risk_decision
+go run ./examples/cel_pricing
 go test ./...
 ```
 
 - [Pricing](examples/pricing): `FirstMatchGroup` selects one eligible offer; a later cap and audit preserve final field provenance through `AppliedBy`.
 - [Payment routing](examples/payment_routing): `FirstFireGroup` tries Stripe, Adyen, PayPal, and bank-transfer stubs, then continues to audit under `EvaluateAll`.
 - [Risk decision](examples/risk_decision): allow, review, reject, nested conditions, Trace, and a conservative default when evidence fails.
+- [CEL pricing](examples/cel_pricing): compile native typed eligibility and cap conditions once; Go actions and a Go audit condition observe sequential mutations.
 
 ## Scope and documentation
 
-Rulite provides typed rules, immutable RuleSet/Compile and engines, descriptive metadata, indexed validation issues, deterministic single-pass execution, policies, Result, Explain, opt-in Trace, synchronous observation, and isolated diagnostics. v0.3 first-match/first-fire groups, mixed entry compilation, hierarchical explanations, group end reasons, ordered resolution/completion events, and runnable payment/pricing examples are available. CI checks structural performance guarantees and records repeatable benchmark comparisons. CEL, dynamic definitions, hot reload, and telemetry integration are not implemented. A separate CEL Condition adapter is a required v0.4 deliverable.
+Rulite provides typed rules, immutable RuleSet/Compile and engines, descriptive metadata, indexed validation issues, deterministic single-pass execution, policies, Result, Explain, opt-in Trace, synchronous observation, and isolated diagnostics. v0.3 first-match/first-fire groups, mixed entry compilation, hierarchical explanations, group end reasons, ordered resolution/completion events, and runnable payment/pricing examples are available. CI checks structural performance guarantees and records repeatable benchmark comparisons. The [CEL Condition adapter](docs/cel.md) provides explicit native struct binding, compile-time boolean checks, reusable programs, and bounded synchronous evaluation. Complex mapping extensions, dynamic definitions, hot reload, and telemetry integration remain planned.
 
 Read [architecture and non-goals](docs/architecture.md), the [roadmap](docs/roadmap.md), [benchmark methodology and baseline](docs/benchmarks.md), and [contributing](CONTRIBUTING.md). Later version goals are plans, not available APIs. Rulite does not replace all conditionals or provide inference, a rule language, workflow orchestration, or automatic rollback.
 

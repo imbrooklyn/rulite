@@ -1,6 +1,6 @@
 # Roadmap
 
-Rulite is a typed, deterministic, single-pass business rules engine. The v0.1 core and v0.2 RuleSet/Compile, metadata, reusable engine construction, indexed validation queries, synchronous Observer/events, isolated Result diagnostics, and benchmark regression automation are implemented. v0.3 first-match/first-fire groups, mixed entry compilation, hierarchical explanations, group end reasons, ordered resolution/completion events, and payment/pricing examples are implemented. Versions after v0.3 describe future goals, not release dates or available APIs.
+Rulite is a typed, deterministic, single-pass business rules engine. The v0.1 core and v0.2 RuleSet/Compile, metadata, reusable engine construction, indexed validation queries, synchronous Observer/events, isolated Result diagnostics, and benchmark regression automation are implemented. v0.3 first-match/first-fire groups, mixed entry compilation, hierarchical explanations, group end reasons, ordered resolution/completion events, and payment/pricing examples are implemented. The native CEL Condition adapter is available; remaining v0.4 extensions and later versions describe future goals, not release dates or available APIs.
 
 | Version | Goals | Explicit boundaries |
 | --- | --- | --- |
@@ -11,7 +11,7 @@ Rulite is a typed, deterministic, single-pass business rules engine. The v0.1 co
 | v0.5 | Atomic snapshot replacement, version/revision metadata, diagnostics, and an optional OpenTelemetry adapter | No distributed control plane or mutation of an active engine snapshot |
 | v1.0 | Stable core and integration contracts supported by compatibility tests and production feedback | Forward chaining, Rete, and workflow orchestration are not prerequisites |
 
-The `rulite/cel` Condition adapter is a required deliverable for v0.4. Its separate package keeps CEL dependencies outside the root runtime. Delivery requires typed native and protobuf bindings, explicit field-name mapping and conversions, compile-time boolean checks, bounded evaluation, context cancellation, and safe concurrent reuse of compiled programs. Unknown and error outcomes must remain ordinary Condition errors. Arbitrary business types will require supported mappings or explicit projectors; unsupported types must fail clearly. These are future requirements, not a currently available adapter.
+The [`rulite/cel` Condition adapter](cel.md) provides explicit native struct binding, exported Go field names, compile-time boolean checks, bounded evaluation, context cancellation, and concurrent program reuse. Unknown and error outcomes remain ordinary Condition errors. The separate package keeps CEL dependencies outside the root runtime. Additional native mappings, explicit JSON-tag mode, protobuf bindings, typed projectors and conversions, dynamic definitions, and the typed action registry remain v0.4 goals. Unsupported native schemas currently fail at construction; those planned extensions are not available APIs.
 
 Separate bounded inference may be considered from v0.6 only for demonstrated workloads. Incremental evaluation may be considered from v0.7 only if inference benchmarks justify it. Neither is implemented or part of `Fire`; Fire remains single-pass. Rete and Phreak have no planned version.
 
@@ -19,7 +19,7 @@ Separate bounded inference may be considered from v0.6 only for demonstrated wor
 
 Rule identity, priority order, Condition/Action signatures, match/fire distinctions, immutable engine ownership, and context/panic fundamentals are core stability candidates. During v0.x, builder names, policy constructors, Result accessors, error wrapper shapes, and Explanation/Trace structures may evolve. Exact explanation text is experimental; use structural accessors instead of parsing it.
 
-Observer/Event, diagnostic, and group accessors are available but provisional during v0.x. Future CEL, dynamic definitions, runtime replacement, and telemetry APIs remain experimental until their owning releases. Internal representations are not public contracts.
+Observer/Event, diagnostic, group, and CEL accessors are available but provisional during v0.x. Future mapping extensions, dynamic definitions, runtime replacement, and telemetry APIs remain experimental until their owning releases. Internal representations are not public contracts.
 
 ## Non-goals
 

@@ -432,6 +432,36 @@ python3 scripts/benchmarks.py /tmp/rulite-group-comparison \
 
 No common workload crossed the advisory threshold. The three common CompileEntries workloads had paired median ratios of 1.096-1.146, so the result does not establish equal CPU cost. Timing remains advisory, and this focused comparison does not cover every diagnostic workload. The full allocation and ownership gates also passed; no-group all-miss remained at zero allocations at all four scales.
 
+## CEL condition measurements
+
+Measured on 2026-09-09: Apple M4 Pro, 12 logical CPUs/default GOMAXPROCS 12, macOS 26.5.2 (25F84), Go 1.27.0, darwin/arm64. Default optimization and GC settings, empty GOFLAGS/GOEXPERIMENT, no race instrumentation. The [CEL workloads](../cel/benchmark_test.go) ran 15 workloads with three 100 ms samples each. These are per-metric medians, not a latency SLA or a cross-machine comparison.
+
+```sh
+go test ./cel -run '^$' -bench . -benchmem -benchtime=100ms -count=3
+```
+
+Compile starts from an existing native compiler and times parsing, checking, exact bool validation, source identity, and program construction for 1/10/100 distinct thresholds. Schema/compiler construction is excluded. Compiled conditions are retained and their match counts checked after timing. Eval prepares all programs outside timing and compares identical native CEL and Go predicates. Fire additionally uses prebuilt root engines, ordinary Go actions, and summary results with Trace/Observer disabled. Input resets every iteration; 1/5/50 conditions match respectively, and every matching action increments a counter. All workloads report allocations and retain sinks. Eval and Fire include error and count assertions.
+
+| Benchmark | ns/op | B/op | allocs/op |
+| --- | ---: | ---: | ---: |
+| `BenchmarkCompile/expressions_1` | 16,368 | 21,220 | 413 |
+| `BenchmarkCompile/expressions_10` | 164,858 | 212,201 | 4,130 |
+| `BenchmarkCompile/expressions_100` | 1,888,607 | 2,122,757 | 41,489 |
+| `BenchmarkEval/cel/expressions_1` | 631.8 | 505 | 13 |
+| `BenchmarkEval/cel/expressions_10` | 6,433 | 5,051 | 130 |
+| `BenchmarkEval/cel/expressions_100` | 73,413 | 50,534 | 1,300 |
+| `BenchmarkEval/go/expressions_1` | 2.020 | 0 | 0 |
+| `BenchmarkEval/go/expressions_10` | 13.67 | 0 | 0 |
+| `BenchmarkEval/go/expressions_100` | 126.7 | 0 | 0 |
+| `BenchmarkFire/cel/expressions_1` | 732.8 | 529 | 14 |
+| `BenchmarkFire/cel/expressions_10` | 6,862 | 5,413 | 134 |
+| `BenchmarkFire/cel/expressions_100` | 76,246 | 53,599 | 1,307 |
+| `BenchmarkFire/go/expressions_1` | 79.53 | 24 | 1 |
+| `BenchmarkFire/go/expressions_10` | 255.0 | 360 | 4 |
+| `BenchmarkFire/go/expressions_100` | 1,763 | 3,048 | 7 |
+
+CEL evaluation includes native reflection, input-size checks, independent activation, cost accounting, and context boundaries. It allocates even when a rule misses. These integration costs do not change the root's allocation guarantee for nonallocating Go conditions. Compiling once and reusing conditions avoids repeating compilation in Fire. The Go comparison uses simple direct field reads and does not perform CEL's resource checks. Results do not predict complex expression, regex, or external action costs; measure the actual business workload.
+
 ## Structural performance guarantees
 
 Ordinary no-trace, no-observer all-miss Fire measured 0 B/op and 0 allocs/op at every tested scale. The allocation regression test also checks that allocation does not grow with rule count and that no per-rule outcome records are created for misses. This guarantee concerns framework execution storage; caller callbacks and contexts may allocate.
