@@ -10,6 +10,7 @@ import "context"
 type Engine[T any] struct {
 	snapshot *compiledSnapshot[T]
 	defaults executionConfig
+	identity SnapshotInfo
 }
 
 // NewEngine is the convenience path for Compile followed by NewEngineFromRuleSet
@@ -57,7 +58,7 @@ func NewEngineFromRuleSet[T any](set *RuleSet[T], options ...FireOption) (*Engin
 	if err != nil {
 		return nil, err
 	}
-	return &Engine[T]{snapshot: set.snapshot, defaults: config}, nil
+	return &Engine[T]{snapshot: set.snapshot, defaults: config, identity: set.identity}, nil
 }
 
 // Fire executes the captured snapshot sequentially in compiled order. Each
@@ -87,6 +88,10 @@ func NewEngineFromRuleSet[T any](set *RuleSet[T], options ...FireOption) (*Engin
 // caller's context. Cancellation is still observed at ordinary boundaries.
 // Concurrent calls must synchronize shared input, callback captures, or observers.
 func (e *Engine[T]) Fire(ctx context.Context, input *T, options ...FireOption) (Result, error) {
+	return e.fire(ctx, input, e.Snapshot(), ErrInvalidEngine, options)
+}
+
+func (e *Engine[T]) fire(ctx context.Context, input *T, identity SnapshotInfo, invalid error, options []FireOption) (Result, error) {
 	if ctx == nil {
 		return Result{}, ErrNilContext
 	}
@@ -94,15 +99,15 @@ func (e *Engine[T]) Fire(ctx context.Context, input *T, options ...FireOption) (
 		return Result{}, ErrNilInput
 	}
 	if e == nil {
-		return Result{}, ErrInvalidEngine
+		return Result{}, invalid
 	}
 	snapshot := e.snapshot
 	if snapshot == nil {
-		return Result{}, ErrInvalidEngine
+		return Result{}, invalid
 	}
 	config, err := configureExecution(e.defaults, options)
 	if err != nil {
 		return Result{}, err
 	}
-	return execute(ctx, input, snapshot, config)
+	return execute(ctx, input, snapshot, config, identity)
 }

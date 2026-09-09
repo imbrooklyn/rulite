@@ -49,6 +49,14 @@ func TestSparseAllMissAllocation(t *testing.T) {
 			}
 			t.Logf("rules=%d path=%d allocations=%g", size, path, allocations)
 			previous = allocations
+			runtime, err := NewRuntime(engine)
+			if err != nil {
+				t.Fatal(err)
+			}
+			allocations = testing.AllocsPerRun(20, func() { result, err = runtime.Fire(context.Background(), &input) })
+			if err != nil || allocations != 0 || result.counts.Unmatched != size || len(result.records) != 0 || result.metadata != engine.snapshot.metadata || result.Snapshot().Revision() != 1 {
+				t.Fatal("runtime lost sparse allocation or metadata boundary", allocations, err)
+			}
 		}
 	}
 }

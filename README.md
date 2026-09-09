@@ -92,6 +92,12 @@ Both construction paths produce identical validation issues, priority order, reg
 
 Before `When`, optionally add `Name`, `Description`, or `Tags` to the builder. Names and descriptions have surrounding whitespace removed. Tags are trimmed, empty values dropped, and exact duplicates removed in first-occurrence order. Metadata never changes RuleID identity. `set.Rule(id)` returns immutable `RuleInfo` and a presence boolean; `set.Rules()` lists metadata in execution order. Tags and view slices are defensive copies. Result, Explain, and Trace rule views expose the same descriptive metadata. See the compiling [reusable pricing example](ruleset_example_test.go), which uses only the root package and demonstrates both construction paths.
 
+## Atomic reload
+
+Use `NewRuntime(engine)` to publish a complete immutable engine. Build and validate the next engine before `runtime.Publish(next)`; each `runtime.Fire` captures one publication for its entire execution. Old calls finish with their captured rules and defaults. Failed compilation or publication leaves the current snapshot available.
+
+`set.WithIdentity(version, digest)` returns an independent RuleSet wrapper with caller-supplied business identity. `result.Snapshot()` exposes the captured version, Runtime revision, and optional source digest; direct Engine execution uses revision zero. Every successful Runtime publication increments its local revision, starting at one. See [atomic runtime snapshots](docs/runtime.md) for a compiling reload example, concurrency, and resource ownership.
+
 ## Local selection groups
 
 Use `FirstMatchGroup(id, members...)` for one eligible rule or `FirstFireGroup(id, members...)` for provider fallback. Both return immutable `Group[T]` values. Assemble mixed definitions with `CompileEntries(providers.Entry(), audit.Entry())`, then use `NewEngineFromRuleSet(set)`. The [compiling payment example](group_example_test.go) selects a provider and runs the following audit rule in the same Fire.
@@ -131,7 +137,7 @@ go test ./...
 
 ## Scope and documentation
 
-Rulite provides typed rules, immutable RuleSet/Compile and engines, descriptive metadata, indexed validation issues, deterministic single-pass execution, policies, Result, Explain, opt-in Trace, synchronous observation, and isolated diagnostics. v0.3 first-match/first-fire groups, mixed entry compilation, hierarchical explanations, group end reasons, ordered resolution/completion events, and runnable payment/pricing examples are available. CI checks structural performance guarantees and records repeatable benchmark comparisons. The [CEL Condition adapter](docs/cel.md) provides native and protobuf typed bindings, explicit JSON field names, projectors, trusted unary functions, compile-time boolean checks, and bounded synchronous evaluation. [Dynamic definitions](docs/dynamic-rules.md) compile strict JSON and frozen typed action capabilities into ordinary rule sets. Hot reload and telemetry integration remain planned.
+Rulite provides typed rules, immutable RuleSet/Compile and engines, descriptive metadata, indexed validation issues, deterministic single-pass execution, policies, Result, Explain, opt-in Trace, synchronous observation, and isolated diagnostics. v0.3 first-match/first-fire groups, mixed entry compilation, hierarchical explanations, group end reasons, ordered resolution/completion events, and runnable payment/pricing examples are available. CI checks structural performance guarantees and records repeatable benchmark comparisons. The [CEL Condition adapter](docs/cel.md) provides native and protobuf typed bindings, explicit JSON field names, projectors, trusted unary functions, compile-time boolean checks, and bounded synchronous evaluation. [Dynamic definitions](docs/dynamic-rules.md) compile strict JSON and frozen typed action capabilities into ordinary rule sets. Runtime atomic replacement and captured version/revision metadata are available; telemetry integration remains planned.
 
 Read [architecture and non-goals](docs/architecture.md), the [roadmap](docs/roadmap.md), [benchmark methodology and baseline](docs/benchmarks.md), and [contributing](CONTRIBUTING.md). Later version goals are plans, not available APIs. Rulite does not replace all conditionals or provide inference, a rule language, workflow orchestration, or automatic rollback.
 

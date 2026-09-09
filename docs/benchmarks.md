@@ -531,6 +531,41 @@ Fire uses prebuilt sets and engines with Trace/Observer disabled. Dynamic JSON, 
 
 Dynamic and typed CEL paths retained the same allocations per Fire in these samples. Compilation and parameter validation are absent from Fire; the dynamic action performs an additional typed callback call with frozen parameters. Small timing and byte differences do not establish a general performance guarantee. Configuration size and trusted callbacks remain separate construction costs.
 
+## Runtime snapshot measurements
+
+Measured on 2026-09-09: Apple M4 Pro, 12 logical CPUs/default GOMAXPROCS 12, macOS 26.5.2 (25F84), Go 1.27.0, GOOS/GOARCH darwin/arm64. Default optimization and GC settings, empty GOFLAGS/GOEXPERIMENT, no race instrumentation. Values are per-metric medians of three 100 ms samples on this host; small differences do not establish a latency SLA or a general zero-overhead claim.
+
+```sh
+go test . -run '^$' -bench '^(BenchmarkSnapshotFire|BenchmarkRuntimePublish|BenchmarkRuntimeConcurrentSwap|BenchmarkCompile)$' -benchmem -benchtime=100ms -count=3
+```
+
+The [snapshot workloads](../runtime_benchmark_test.go) build engines and identity outside Fire timing, reset input every iteration, and check counts, effects, stop reason, version, digest, and revision. Both direct and Runtime paths call prepared method values. `matched_false` means all miss; `matched_true` means 10% match. Trace and Observer are disabled. Publish alternates two prepared engines and checks every assigned revision, then validates the final execution outside timing. The existing [Compile workload](../compile_benchmark_test.go) times compilation separately from builder construction and validates its output after timing.
+
+Concurrent swap uses Go's RunParallel at GOMAXPROCS 12, with independently reset input per worker. Each worker publishes once per 32 Fire calls, including its first call. Timing includes that publication work, outcome/identity checks, and aggregate operation counters. Its ns/op is aggregate wall time per completed two-rule Fire, not individual request latency or publication latency. All workloads report allocations and retain a sink or counter; there are no absolute timing assertions.
+
+| Benchmark | ns/op | B/op | allocs/op |
+| --- | ---: | ---: | ---: |
+| `BenchmarkCompile/rules_10` | 945.5 | 1,624 | 10 |
+| `BenchmarkCompile/rules_100` | 15,145 | 12,936 | 10 |
+| `BenchmarkCompile/rules_1000` | 205,167 | 144,944 | 12 |
+| `BenchmarkCompile/rules_10000` | 2,517,010 | 1,330,150 | 40 |
+| `BenchmarkSnapshotFire/engine/matched_false/rules_10` | 204.2 | 0 | 0 |
+| `BenchmarkSnapshotFire/runtime/matched_false/rules_10` | 204.1 | 0 | 0 |
+| `BenchmarkSnapshotFire/engine/matched_true/rules_10` | 222 | 24 | 1 |
+| `BenchmarkSnapshotFire/runtime/matched_true/rules_10` | 221.7 | 24 | 1 |
+| `BenchmarkSnapshotFire/engine/matched_false/rules_100` | 1,084 | 0 | 0 |
+| `BenchmarkSnapshotFire/runtime/matched_false/rules_100` | 1,082 | 0 | 0 |
+| `BenchmarkSnapshotFire/engine/matched_true/rules_100` | 1,345 | 744 | 5 |
+| `BenchmarkSnapshotFire/runtime/matched_true/rules_100` | 1,340 | 744 | 5 |
+| `BenchmarkSnapshotFire/engine/matched_false/rules_1000` | 10,203 | 0 | 0 |
+| `BenchmarkSnapshotFire/runtime/matched_false/rules_1000` | 10,214 | 0 | 0 |
+| `BenchmarkSnapshotFire/engine/matched_true/rules_1000` | 12,384 | 6,120 | 8 |
+| `BenchmarkSnapshotFire/runtime/matched_true/rules_1000` | 12,381 | 6,120 | 8 |
+| `BenchmarkRuntimePublish` | 20.61 | 48 | 1 |
+| `BenchmarkRuntimeConcurrentSwap` | 46.09 | 121 | 3 |
+
+Runtime and direct Engine have the same allocation counts in these samples. Publication allocates one complete publication object and does not compile or copy executable nodes. Source acquisition and dynamic compilation are separate costs. Runtime does not preserve a history of executable publications; retained diagnostic views keep metadata and facts. See [resource ownership](runtime.md#concurrency-and-resource-ownership) before closing resources captured by superseded callbacks.
+
 ## Structural performance guarantees
 
 Ordinary no-trace, no-observer all-miss Fire measured 0 B/op and 0 allocs/op at every tested scale. The allocation regression test also checks that allocation does not grow with rule count and that no per-rule outcome records are created for misses. This guarantee concerns framework execution storage; caller callbacks and contexts may allocate.

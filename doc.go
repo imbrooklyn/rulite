@@ -36,4 +36,12 @@
 // observe *T without mutating it; actions may mutate it or perform external
 // side effects. Rule definitions and engines are immutable, but captured
 // callback and observer state remains the caller's responsibility.
+//
+// Runtime publishes complete immutable engines atomically. Each Fire captures
+// one publication, including its defaults and SnapshotInfo. RuleSet.WithIdentity
+// supplies business version and optional source digest; Runtime publications
+// start at revision one, while direct Engine execution uses revision zero.
+// Results, traces, explanations, and events retain captured identity without
+// retaining executable callbacks. Callers acquire sources and manage external
+// resources; Runtime starts no background work and requires no Close.
 package rulite

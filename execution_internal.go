@@ -13,8 +13,8 @@ type execution struct {
 	panicMode PanicMode
 }
 
-func execute[T any](ctx context.Context, input *T, snapshot *compiledSnapshot[T], config executionConfig) (Result, error) {
-	x := execution{result: Result{metadata: snapshot.metadata}, observer: config.observer, panicMode: config.panic}
+func execute[T any](ctx context.Context, input *T, snapshot *compiledSnapshot[T], config executionConfig, identity SnapshotInfo) (Result, error) {
+	x := execution{result: Result{metadata: snapshot.metadata, identity: identity}, observer: config.observer, panicMode: config.panic}
 	x.result.counts.Total = len(snapshot.metadata.rules)
 	var start time.Time
 	if config.trace {

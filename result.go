@@ -128,6 +128,7 @@ func (s StopReason) String() string {
 // remain caller-owned read-only values. All slice accessors return copies.
 type Result struct {
 	metadata         *snapshotMetadata
+	identity         SnapshotInfo
 	counts           Counts
 	stop             StopReason
 	records          []executionRecord

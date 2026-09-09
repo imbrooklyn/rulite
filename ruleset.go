@@ -8,6 +8,7 @@ package rulite
 // Callers must synchronize any shared mutable callback captures.
 type RuleSet[T any] struct {
 	snapshot *compiledSnapshot[T]
+	identity SnapshotInfo
 }
 
 // Compile validates rules and freezes their metadata, registration indexes,

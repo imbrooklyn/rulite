@@ -9,6 +9,7 @@ func (x *execution) observe(ctx context.Context, event Event) {
 	if x.observer == nil {
 		return
 	}
+	event.identity = x.result.identity
 	if err := callObserver(ctx, x.observer, event, x.panicMode); err != nil {
 		x.result.diagnostics = append(x.result.diagnostics, Diagnostic{event: event, cause: err})
 		x.observer = nil

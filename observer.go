@@ -114,13 +114,14 @@ func (k EventKind) String() string {
 // still have start/finish events when observation stays enabled. A propagated
 // panic makes no promise of a finish event or returned Result.
 type Event struct {
-	rule    *ruleMetadata
-	order   int
-	failure *Failure
-	summary *eventSummary
-	group   *GroupResult
-	kind    EventKind
-	outcome ConditionOutcome
+	identity SnapshotInfo
+	rule     *ruleMetadata
+	order    int
+	failure  *Failure
+	summary  *eventSummary
+	group    *GroupResult
+	kind     EventKind
+	outcome  ConditionOutcome
 }
 
 type eventSummary struct {
