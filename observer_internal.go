@@ -43,6 +43,14 @@ func (x *execution) observeSummary(ctx context.Context, kind EventKind) {
 	x.observe(ctx, Event{kind: kind, summary: &summary})
 }
 
+func (x *execution) observeGroup(ctx context.Context, kind EventKind, group *groupMetadata) {
+	if x.observer == nil {
+		return
+	}
+	view := x.result.groupAt(group.index)
+	x.observe(ctx, Event{kind: kind, group: &view})
+}
+
 func callObserver(ctx context.Context, observer Observer, event Event, mode PanicMode) (err error) {
 	if mode == PropagatePanics {
 		return observer.Observe(ctx, event)

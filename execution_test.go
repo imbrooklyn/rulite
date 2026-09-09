@@ -264,6 +264,7 @@ func TestCompiledExecutionOrderAndMutation(t *testing.T) {
 
 func checkResultConsistency(t testing.TB, result rulite.Result) {
 	t.Helper()
+	checkGroupViews(t, result)
 	c := result.Counts()
 	if c.Total != c.Evaluated+c.NotEvaluated || c.Evaluated != c.Unmatched+c.Fired+c.Skipped+c.ConditionFailed+c.ActionFailed || c.Matched != c.Fired+c.Skipped+c.ActionFailed || c.Failed != c.ConditionFailed+c.ActionFailed || c.PanicRecovered > c.Failed {
 		t.Fatalf("count invariants failed: %+v", c)
@@ -344,6 +345,13 @@ func checkResultConsistency(t testing.TB, result rulite.Result) {
 		}
 		for _, tr := range trace.Rules() {
 			x, _ := result.Rule(tr.ID())
+			group, grouped := tr.GroupID()
+			xGroup, xGrouped := x.GroupID()
+			member, memberOK := tr.MemberIndex()
+			xMember, xMemberOK := x.MemberIndex()
+			if group != xGroup || grouped != xGrouped || member != xMember || memberOK != xMemberOK || tr.TopLevelOrder() != x.TopLevelOrder() {
+				t.Fatal("trace lost group coordinates")
+			}
 			if tr.Order() != x.Order() || tr.RegistrationIndex() != x.RegistrationIndex() || tr.Priority() != x.Priority() || tr.State() != x.State() || tr.Evaluated() != x.Evaluated() || tr.Matched() != x.Matched() || tr.ActionStarted() != x.ActionStarted() || tr.Fired() != x.Fired() || tr.SkipReason() != x.SkipReason() || tr.NotEvaluatedReason() != x.NotEvaluatedReason() || !reflect.DeepEqual(tr.Error(), x.Error()) {
 				t.Fatal("trace rule differs from canonical ledger")
 			}

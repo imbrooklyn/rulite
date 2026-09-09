@@ -328,6 +328,55 @@ No-group all-miss still allocates zero bytes across all tested scales and all th
 
 Compilation now stores explicit top-level and member coordinates and group boundaries. Its memory and timing costs are higher than the historical pure-rule baseline; reusable engine construction still shares the snapshot with one 32-byte allocation. No-group Fire timing is also higher in these samples. The dated measurements do not isolate all sources of timing variation or establish unchanged CPU cost. Correct results, zero-allocation all-miss execution without groups, and callback-free retained metadata remain structural gates.
 
+## Group diagnostics measurements
+
+Measured on 2026-09-09: Apple M4 Pro, default GOMAXPROCS 12, macOS 26.5.2 (25F84), Go 1.27.0, darwin/arm64. Default optimization and GC settings, empty GOFLAGS/GOEXPERIMENT, no race instrumentation. The full suite ran 272 workloads with three 100 ms samples each; the table reports medians. Earlier measurements remain dated comparison points. These samples do not establish tail latency or a universal service budget.
+
+```sh
+go test . -run '^$' -bench . -benchmem -benchtime=100ms -count=3
+go test . -run '^$' -bench '^(BenchmarkGroupDiagnostics|BenchmarkGroupViews)$' -benchmem -benchtime=100ms -count=3
+```
+
+[Diagnostic workloads](../group_diagnostics_benchmark_test.go) add 120 Fire cases: both group kinds, 1 group with 10 or 1,000 members or 10 groups with 100 members each, five outcome patterns, and four Trace/Observer combinations. Each execution ends with one successful audit rule. Start, middle, and end resolve at positions 0, N/2, and N-1; all-miss exhausts each group. Fallback fails the first action: first-match resolves there, while first-fire succeeds on the second. Global policy is EvaluateAll with continued action errors. Definitions, compilation, and engine construction are outside Fire timing. Input and observer counters reset each iteration; counts, stop, error presence, mutations, total deliveries, resolutions, and completions are checked inside timing. Full structural checks run before timing. Each case reports allocations and retains a result or counter.
+
+Nine view cases start from an existing traced first-fire fallback Result. Entries timing copies the top-level collection and every member collection. Text timing formats all rules, group ends, failures, and holes. Trace view timing copies group and rule collections. These are on-demand costs separate from Fire. The original compile and no-group workloads also ran unchanged; the retained FireGroups case includes its group lookup assertion, whereas GroupDiagnostics uses event counters.
+
+| Benchmark | ns/op | B/op | allocs/op |
+| --- | ---: | ---: | ---: |
+| `BenchmarkCompile/rules_1000` | 214,603.000 | 144,904 | 12 |
+| `BenchmarkNewEngineFromRuleSet/rules_1000` | 11.680 | 32 | 1 |
+| `BenchmarkFireScale/all_miss/rules_10` | 157.000 | 0 | 0 |
+| `BenchmarkFireScale/all_miss/rules_1000` | 10,046.000 | 0 | 0 |
+| `BenchmarkFireScale/all_miss/rules_10000` | 100,187.000 | 0 | 0 |
+| `BenchmarkFireGroups/first-fire/start/members_1000` | 152.600 | 104 | 3 |
+| `BenchmarkGroupDiagnostics/first-fire/start/summary/groups_1/members_1000` | 142.600 | 104 | 3 |
+| `BenchmarkGroupDiagnostics/first-fire/start/trace/groups_1/members_1000` | 14,915.000 | 98,760 | 9 |
+| `BenchmarkGroupDiagnostics/first-fire/start/observer/groups_1/members_1000` | 346.200 | 488 | 7 |
+| `BenchmarkGroupDiagnostics/first-fire/start/trace_observer/groups_1/members_1000` | 14,958.000 | 99,144 | 13 |
+| `BenchmarkGroupDiagnostics/first-fire/all_miss/summary/groups_1/members_1000` | 10,175.000 | 56 | 2 |
+| `BenchmarkGroupDiagnostics/first-fire/all_miss/trace/groups_1/members_1000` | 97,731.000 | 258,552 | 2,006 |
+| `BenchmarkGroupDiagnostics/first-fire/all_miss/observer/groups_1/members_1000` | 19,233.000 | 344 | 5 |
+| `BenchmarkGroupDiagnostics/first-fire/all_miss/trace_observer/groups_1/members_1000` | 107,903.000 | 258,840 | 2,009 |
+| `BenchmarkGroupDiagnostics/first-fire/fallback/summary/groups_1/members_1000` | 237.700 | 360 | 8 |
+| `BenchmarkGroupDiagnostics/first-fire/fallback/trace/groups_1/members_1000` | 15,150.000 | 99,176 | 16 |
+| `BenchmarkGroupDiagnostics/first-fire/fallback/observer/groups_1/members_1000` | 472.400 | 744 | 12 |
+| `BenchmarkGroupDiagnostics/first-fire/fallback/trace_observer/groups_1/members_1000` | 15,010.000 | 99,560 | 20 |
+| `BenchmarkGroupDiagnostics/first-fire/middle/summary/groups_1/members_1000` | 5,063.000 | 104 | 3 |
+| `BenchmarkGroupDiagnostics/first-fire/end/summary/groups_1/members_1000` | 10,246.000 | 104 | 3 |
+| `BenchmarkGroupDiagnostics/first-match/fallback/summary/groups_1/members_1000` | 196.300 | 264 | 7 |
+| `BenchmarkGroupDiagnostics/first-fire/start/observer/groups_1/members_10` | 343.100 | 488 | 7 |
+| `BenchmarkGroupDiagnostics/first-fire/start/observer/groups_10/members_100` | 1,786.000 | 3,176 | 28 |
+| `BenchmarkGroupViews/entries/groups_1/members_1000` | 29,828.000 | 139,776 | 2 |
+| `BenchmarkGroupViews/text/groups_1/members_1000` | 625,718.000 | 1,312,212 | 8,527 |
+| `BenchmarkGroupViews/trace/groups_1/members_1000` | 43,296.000 | 237,664 | 2 |
+| `BenchmarkGroupViews/entries/groups_10/members_100` | 30,893.000 | 146,432 | 11 |
+| `BenchmarkGroupViews/text/groups_10/members_100` | 624,617.000 | 1,305,466 | 7,835 |
+| `BenchmarkGroupViews/trace/groups_10/members_100` | 44,444.000 | 238,592 | 2 |
+
+No-group all-miss still has zero allocations. Group end facts fit in the existing per-group record. Without Trace, resolving a group of 1,000 members immediately uses the same 104 bytes and three allocations as the retained group baseline. Normal observation adds two execution summaries and one independent snapshot per emitted group event: two for a resolved group, one for exhaustion. Increasing the uncalled suffix from 10 to 1,000 members does not add summary or event allocations. More entered groups create more group snapshots.
+
+Trace retains a complete view of all definitions, including uncalled members; that storage can be substantial even when selection happens immediately. Text explanations allocate considerably more than structural views and are intended for on-demand inspection. Results and event snapshots retain their outcomes without pooling; execution reads duration clocks only when Trace is enabled. Short timing differences from the preceding samples do not prove equivalent CPU cost; the allocation and callback-free ownership gates remain the regression criteria.
+
 ## Structural performance guarantees
 
 Ordinary no-trace, no-observer all-miss Fire measured 0 B/op and 0 allocs/op at every tested scale. The allocation regression test also checks that allocation does not grow with rule count and that no per-rule outcome records are created for misses. This guarantee concerns framework execution storage; caller callbacks and contexts may allocate.

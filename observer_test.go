@@ -20,13 +20,14 @@ type observedFact struct {
 	id      rulite.RuleID
 	phase   rulite.Phase
 	outcome rulite.ConditionOutcome
+	groupID rulite.GroupID
 }
 
 func expectedEvents(result rulite.Result) []observedFact {
 	facts := []observedFact{{kind: rulite.EventExecutionStarted}}
-	for _, rule := range result.Explain().Rules() {
+	addRule := func(rule rulite.RuleExecution, group rulite.GroupResult) {
 		if !rule.Evaluated() {
-			continue
+			return
 		}
 		outcome := rulite.ConditionOutcomeFalse
 		if rule.Matched() {
@@ -36,15 +37,35 @@ func expectedEvents(result rulite.Result) []observedFact {
 		if failed && failure.Phase() == rulite.ConditionPhase {
 			outcome = rulite.ConditionOutcomeError
 		}
-		facts = append(facts, observedFact{rulite.EventRuleEvaluated, rule.ID(), rulite.ConditionPhase, outcome})
+		facts = append(facts, observedFact{kind: rulite.EventRuleEvaluated, id: rule.ID(), phase: rulite.ConditionPhase, outcome: outcome})
 		if rule.Matched() {
-			facts = append(facts, observedFact{rulite.EventRuleMatched, rule.ID(), rulite.ConditionPhase, rulite.ConditionOutcomeTrue})
+			facts = append(facts, observedFact{kind: rulite.EventRuleMatched, id: rule.ID(), phase: rulite.ConditionPhase, outcome: rulite.ConditionOutcomeTrue})
+		}
+		selected, _ := group.SelectedRule()
+		if selected == rule.ID() && group.Kind() == rulite.GroupFirstMatch {
+			facts = append(facts, observedFact{kind: rulite.EventGroupResolved, groupID: group.ID()})
 		}
 		if failed {
 			facts = append(facts, observedFact{kind: rulite.EventRuleFailed, id: rule.ID(), phase: failure.Phase()})
 		}
 		if rule.Fired() {
 			facts = append(facts, observedFact{kind: rulite.EventRuleFired, id: rule.ID(), phase: rulite.ActionPhase})
+		}
+		if selected == rule.ID() && group.Kind() == rulite.GroupFirstFire {
+			facts = append(facts, observedFact{kind: rulite.EventGroupResolved, groupID: group.ID()})
+		}
+	}
+	for _, entry := range result.Explain().Entries() {
+		if rule, ok := entry.Rule(); ok {
+			addRule(rule, rulite.GroupResult{})
+		} else {
+			group, _ := entry.Group()
+			for _, rule := range entry.Members() {
+				addRule(rule, group)
+			}
+			if group.Entered() {
+				facts = append(facts, observedFact{kind: rulite.EventGroupFinished, groupID: group.ID()})
+			}
 		}
 	}
 	return append(facts, observedFact{kind: rulite.EventExecutionFinished})
@@ -60,19 +81,45 @@ func checkObservedEvent(t testing.TB, event rulite.Event, want observedFact, res
 	outcome, hasOutcome := event.ConditionOutcome()
 	failure, hasFailure := event.Failure()
 	counts, hasCounts := event.Counts()
+	group, hasGroup := event.Group()
+	if hasGroup != (want.groupID != "") || group.ID() != want.groupID {
+		t.Fatal("invalid group event presence")
+	}
+	if hasGroup {
+		final, ok := result.Group(want.groupID)
+		selected, selectedOK := group.SelectedRule()
+		finalSelected, finalSelectedOK := final.SelectedRule()
+		if !ok || group.ID() != final.ID() || group.Kind() != final.Kind() || group.Priority() != final.Priority() || group.Order() != final.Order() || group.RegistrationIndex() != final.RegistrationIndex() || group.State() != final.State() || selected != finalSelected || selectedOK != finalSelectedOK {
+			t.Fatal("group event differs from captured facts")
+		}
+		if want.kind == rulite.EventGroupResolved {
+			if !group.Resolved() || !group.Entered() || group.EndReason() != rulite.GroupEndNone || group.StopReason() != rulite.StopNone {
+				t.Fatal("resolved snapshot changed after completion")
+			}
+		} else if !reflect.DeepEqual(group, final) {
+			t.Fatal("group finish differs from ledger")
+		}
+	}
 	if hasRule != (want.id != "") || info.ID() != want.id || hasPhase != hasRule || phase != want.phase || outcome != want.outcome {
 		t.Fatalf("event fields disagree with fact: %+v", want)
 	}
 	if hasOutcome != (want.kind == rulite.EventRuleEvaluated || want.kind == rulite.EventRuleMatched) {
 		t.Fatal("invalid condition outcome presence")
 	}
-	if hasCounts != !hasRule {
+	if hasCounts != (want.kind == rulite.EventExecutionStarted || want.kind == rulite.EventExecutionFinished) {
 		t.Fatal("invalid summary presence")
 	}
 	if hasRule {
 		x, _ := result.Rule(info.ID())
 		if info.Order() != x.Order() || info.RegistrationIndex() != x.RegistrationIndex() || info.Priority() != x.Priority() || info.Name() != x.Name() || !slices.Equal(info.Tags(), x.Tags()) {
 			t.Fatal("event lost compiled metadata")
+		}
+		groupID, grouped := info.GroupID()
+		xGroup, xGrouped := x.GroupID()
+		member, memberOK := info.MemberIndex()
+		xMember, xMemberOK := x.MemberIndex()
+		if groupID != xGroup || grouped != xGrouped || member != xMember || memberOK != xMemberOK || info.TopLevelOrder() != x.TopLevelOrder() {
+			t.Fatal("event lost group coordinates")
 		}
 		clear(info.Tags())
 	}

@@ -26,14 +26,18 @@ func execute[T any](ctx context.Context, input *T, snapshot *compiledSnapshot[T]
 		return x.finish(ctx, start)
 	}
 
-	if len(snapshot.entries) == 0 {
+	if len(snapshot.metadata.entries) == 0 {
 		if executeRules(ctx, input, snapshot, config, &x, compiledEntry{end: len(snapshot.callbacks)}) {
 			return x.finish(ctx, start)
 		}
 	} else {
 		x.result.groups = make([]groupRecord, len(snapshot.metadata.groups))
-		for _, entry := range snapshot.entries {
-			if executeRules(ctx, input, snapshot, config, &x, entry) {
+		for _, entry := range snapshot.metadata.entries {
+			stopped := executeRules(ctx, input, snapshot, config, &x, entry)
+			if entry.group != nil {
+				x.finishGroup(ctx, entry.group, stopped)
+			}
+			if stopped {
 				return x.finish(ctx, start)
 			}
 		}
@@ -117,6 +121,9 @@ func executeRules[T any](ctx context.Context, input *T, snapshot *compiledSnapsh
 		}
 		x.observeRule(ctx, EventRuleEvaluated, order, ConditionOutcomeTrue)
 		x.observeRule(ctx, EventRuleMatched, order, ConditionOutcomeTrue)
+		if entry.group != nil && entry.group.kind == GroupFirstMatch {
+			x.observeGroup(ctx, EventGroupResolved, entry.group)
+		}
 		// A successful match is preserved even when its action cannot start.
 		if x.contextDone(ctx) {
 			x.record(order, RuleSkipped)
@@ -150,6 +157,9 @@ func executeRules[T any](ctx context.Context, input *T, snapshot *compiledSnapsh
 				x.resolveGroup(entry.group, id)
 			}
 			x.observeRule(ctx, EventRuleFired, order, ConditionOutcomeNotEvaluated)
+			if entry.group != nil && entry.group.kind == GroupFirstFire {
+				x.observeGroup(ctx, EventGroupResolved, entry.group)
+			}
 		}
 		if x.contextDone(ctx) {
 			return true

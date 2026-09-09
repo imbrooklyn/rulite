@@ -19,14 +19,18 @@
 // partial Result and never undo side effects.
 //
 // Result, its always-available Explanation, and opt-in Trace share one ledger.
+// Explanation.Entries exposes top-level rules and groups with ordered member
+// outcomes. GroupResult separates selection from the local end and global stop.
 // Fired identifies successful action returns, not field writes. Applications
 // needing field attribution should record provenance, such as AppliedBy RuleID,
 // in their own state. Trace adds timing and built-in combinator child outcomes.
 // Context cancellation is cooperative at callback boundaries; Fire never leaves
 // a callback running in the background after returning.
-// WithObserver adds synchronous ordered events. Observer errors and recovered
-// panics become independent Result diagnostics, without changing business policy
-// or outcomes. Observers must manage their own latency and shared-state safety.
+// WithObserver adds synchronous ordered rule, group, and execution events.
+// Group events capture selection and completion without retaining live state.
+// Observer errors and recovered panics become independent Result diagnostics,
+// without changing business policy or outcomes. Observers must manage their own
+// latency and shared-state safety.
 //
 // The type parameter T should be a non-pointer business state type. Conditions
 // observe *T without mutating it; actions may mutate it or perform external

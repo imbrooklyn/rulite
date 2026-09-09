@@ -1,5 +1,7 @@
 package rulite
 
+import "context"
+
 // GroupState describes local selection independently of the global StopReason.
 type GroupState uint8
 
@@ -37,8 +39,56 @@ func (s GroupState) String() string {
 // No per-member records are needed for ordinary misses or local holes.
 type groupRecord struct {
 	state       GroupState
+	endReason   GroupEndReason
+	stop        StopReason
 	selected    RuleID
 	skippedFrom int
+}
+
+// GroupEndReason explains why a group stopped processing members, independently
+// of whether its selection criterion was observed.
+type GroupEndReason uint8
+
+const (
+	// GroupEndNone means no terminal group decision is recorded. It appears on
+	// zero views and resolved events delivered before the group's end decision.
+	GroupEndNone GroupEndReason = iota
+	// GroupEndResolved means local selection advanced past the remaining members.
+	GroupEndResolved
+	// GroupEndExhausted means all members finished without selection, including an empty group.
+	GroupEndExhausted
+	// GroupEndExecutionStopped means global termination prevented entry or local completion.
+	GroupEndExecutionStopped
+)
+
+// String returns the group end reason's textual name.
+func (r GroupEndReason) String() string {
+	switch r {
+	case GroupEndNone:
+		return "none"
+	case GroupEndResolved:
+		return "resolved"
+	case GroupEndExhausted:
+		return "exhausted"
+	case GroupEndExecutionStopped:
+		return "execution-stopped"
+	default:
+		return "unknown"
+	}
+}
+
+func (x *execution) finishGroup(ctx context.Context, group *groupMetadata, stopped bool) {
+	record := &x.result.groups[group.index]
+	if record.state == GroupNotEntered {
+		return
+	}
+	record.endReason = GroupEndExhausted
+	if stopped {
+		record.endReason, record.stop = GroupEndExecutionStopped, x.result.stop
+	} else if record.state == GroupResolved {
+		record.endReason = GroupEndResolved
+	}
+	x.observeGroup(ctx, EventGroupFinished, group)
 }
 
 func (x *execution) resolveGroup(group *groupMetadata, id RuleID) {
@@ -75,6 +125,16 @@ func (g GroupResult) RegistrationIndex() int { return g.metadata.registrationInd
 // State returns the local outcome independently of global termination.
 func (g GroupResult) State() GroupState { return g.record.state }
 
+// EndReason returns the terminal local decision, independent of selection.
+// A resolved group can end because global execution stopped. Nonzero Result group views
+// always have an end reason; a resolved event has GroupEndNone until completion.
+func (g GroupResult) EndReason() GroupEndReason { return g.record.endReason }
+
+// StopReason returns the global reason preventing entry or local completion.
+// Locally resolved/exhausted groups and zero or pre-completion event views return
+// StopNone. A later global stop does not rewrite an earlier group's end facts.
+func (g GroupResult) StopReason() StopReason { return g.record.stop }
+
 // Entered reports that execution passed the group's initial context boundary.
 func (g GroupResult) Entered() bool { return g.record.state != GroupNotEntered }
 
@@ -103,6 +163,9 @@ func (r Result) groupAt(index int) GroupResult {
 	if index < len(r.groups) {
 		g.record = r.groups[index]
 	}
+	if g.record.state == GroupNotEntered {
+		g.record.endReason, g.record.stop = GroupEndExecutionStopped, r.stop
+	}
 	return g
 }
 
@@ -121,3 +184,9 @@ func (r Result) Groups() []GroupResult {
 
 // Groups returns the same group facts as Result.Groups, in top-level order.
 func (e Explanation) Groups() []GroupResult { return e.result.Groups() }
+
+// Groups returns copied group outcomes in compiled top-level order from the same ledger as Result.
+func (t Trace) Groups() []GroupResult { return t.result.Groups() }
+
+// Group returns the captured outcome by exact identity, or a zero view and false.
+func (t Trace) Group(id GroupID) (GroupResult, bool) { return t.result.Group(id) }

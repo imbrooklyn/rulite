@@ -60,6 +60,12 @@ const (
 	EventRuleFailed
 	// EventExecutionFinished follows the final business stop and counts, before Fire returns.
 	EventExecutionFinished
+	// EventGroupResolved follows the selecting matched (first-match) or fired
+	// (first-fire) event, before the existing context and global stop checks.
+	EventGroupResolved
+	// EventGroupFinished follows an entered group's final local or global end
+	// decision, before the next top-level entry or execution finish.
+	EventGroupFinished
 )
 
 // String returns the event kind's textual name.
@@ -79,6 +85,10 @@ func (k EventKind) String() string {
 		return "rule-failed"
 	case EventExecutionFinished:
 		return "execution-finished"
+	case EventGroupResolved:
+		return "group-resolved"
+	case EventGroupFinished:
+		return "group-finished"
 	default:
 		return "unknown"
 	}
@@ -95,6 +105,9 @@ func (k EventKind) String() string {
 // then matched. Its action emits fired on success or failed on error/recovery.
 // A skipped action emits neither; an uncalled rule emits no events.
 // EventRuleMatched proves eligibility, not action start or success.
+// Group events carry immutable selection/end snapshots through Group. Unentered
+// groups emit no group events. Existing kind values and pure-rule streams remain
+// unchanged; consumers of grouped definitions must handle the added group kinds.
 //
 // Delivery stops at the first observer error or recovered observer panic.
 // No events are sent on preflight failure. Empty and already-canceled executions
@@ -105,6 +118,7 @@ type Event struct {
 	order   int
 	failure *Failure
 	summary *eventSummary
+	group   *GroupResult
 	kind    EventKind
 	outcome ConditionOutcome
 }
@@ -116,6 +130,17 @@ type eventSummary struct {
 
 // Kind returns the fact's tag, or EventNone for a zero Event.
 func (e Event) Kind() EventKind { return e.kind }
+
+// Group returns a captured selection or end snapshot for group events only.
+// Resolved snapshots have GroupEndNone and StopNone; finished snapshots equal
+// Result.Group. Other events return a zero view and false. Rule events expose
+// membership through Rule().GroupID(), without an in-progress group view.
+func (e Event) Group() (GroupResult, bool) {
+	if e.group == nil {
+		return GroupResult{}, false
+	}
+	return *e.group, true
+}
 
 // Rule returns metadata for a rule event, or a zero view and false otherwise.
 // Order is the flattened executable position; RegistrationIndex is the original
@@ -129,7 +154,7 @@ func (e Event) Rule() (RuleInfo, bool) {
 }
 
 // Phase returns ConditionPhase for evaluated/matched events, ActionPhase for
-// fired events, and the canonical failure phase for failed events. Execution
+// fired events, and the canonical failure phase for failed events. Other
 // events and a zero Event return ConditionPhase and false.
 func (e Event) Phase() (Phase, bool) {
 	switch e.kind {
@@ -166,7 +191,7 @@ func (e Event) Failure() (Failure, bool) {
 	return *e.failure, true
 }
 
-// Counts returns a copied summary for start/finish events, or zero and false
+// Counts returns a copied summary for execution start/finish events, or zero and false
 // otherwise. Start has Total=NotEvaluated and all other counts zero. Finish
 // has the final business counts, unaffected by observation diagnostics.
 func (e Event) Counts() (Counts, bool) {
@@ -176,7 +201,7 @@ func (e Event) Counts() (Counts, bool) {
 	return e.summary.counts, true
 }
 
-// StopReason returns the final business reason for a finish event, otherwise
+// StopReason returns the final business reason for an execution-finished event, otherwise
 // StopNone. Cancellation during finish delivery cannot retroactively change
 // terminal business facts; there is no later context boundary in this Fire.
 func (e Event) StopReason() StopReason {

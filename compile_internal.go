@@ -22,6 +22,7 @@ type snapshotMetadata struct {
 	byID      map[RuleID]int
 	groups    []groupMetadata
 	byGroupID map[GroupID]int
+	entries   []compiledEntry
 }
 
 type groupMetadata struct {
@@ -44,12 +45,11 @@ type ruleCallbacks[T any] struct {
 	action    Action[T]
 }
 
-// Both slices use compiled order. All slices and maps are private and become
-// read-only before the snapshot is returned.
+// Rule metadata and callbacks share compiled executable order. All slices and
+// maps are private and become read-only before the snapshot is returned.
 type compiledSnapshot[T any] struct {
 	metadata  *snapshotMetadata
 	callbacks []ruleCallbacks[T]
-	entries   []compiledEntry
 }
 
 func compileRules[T any](rules []Rule[T]) (*compiledSnapshot[T], error) {
@@ -191,7 +191,8 @@ func compileDefinitions[T any](definitions definitionList[T]) (*compiledSnapshot
 		}
 		entries = append(entries, compiledEntry{start: start, end: group.end, group: group})
 	}
-	return &compiledSnapshot[T]{metadata: metadata, callbacks: callbacks, entries: entries}, nil
+	metadata.entries = entries
+	return &compiledSnapshot[T]{metadata: metadata, callbacks: callbacks}, nil
 }
 
 func validRuleID(id RuleID) bool {

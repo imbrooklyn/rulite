@@ -1,0 +1,439 @@
+=== not_started ===
+execution: not-started
+stop reason: none
+
+=== completed ===
+execution: completed
+summary: total=6 evaluated=5 not-evaluated=1 matched=3 unmatched=1 fired=2 skipped=0 failed=2 condition-failed=1 action-failed=1 panic-recovered=0
+
+group empty kind=first-match top-level-order=0 registration-index=0 priority=0 state=exhausted selected-rule= end-reason=exhausted stop=none
+
+group providers kind=first-fire top-level-order=1 registration-index=1 priority=0 state=resolved selected-rule=rule/3 end-reason=resolved stop=none
+
+  rule rule/0 order=0 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=0
+    evaluated=true matched=false action-started=false action-success=false state=unmatched
+
+  rule rule/1 order=1 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=1
+    evaluated=true matched=false action-started=false action-success=false state=failed
+    failure: rule "rule/1" condition failed: provider unavailable; continued=true
+
+  rule rule/2 order=2 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=2
+    evaluated=true matched=true action-started=true action-success=false state=failed
+    failure: rule "rule/2" action failed: provider unavailable; continued=true
+
+  rule rule/3 order=3 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=3
+    evaluated=true matched=true action-started=true action-success=true state=fired
+
+  rule rule/4 order=4 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=4
+    evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+    not-evaluated reason: group-resolved
+
+rule audit order=5 registration-index=2 priority=0
+  top-level-order=2
+  evaluated=true matched=true action-started=true action-success=true state=fired
+
+group later kind=first-fire top-level-order=3 registration-index=3 priority=0 state=exhausted selected-rule= end-reason=exhausted stop=none
+events:
+  execution-started
+  group-finished group=empty state=exhausted selected= end=exhausted stop=none
+  rule-evaluated rule=rule/0
+  rule-evaluated rule=rule/1
+  rule-failed rule=rule/1
+  rule-evaluated rule=rule/2
+  rule-matched rule=rule/2
+  rule-failed rule=rule/2
+  rule-evaluated rule=rule/3
+  rule-matched rule=rule/3
+  rule-fired rule=rule/3
+  group-resolved group=providers state=resolved selected=rule/3 end=none stop=none
+  group-finished group=providers state=resolved selected=rule/3 end=resolved stop=none
+  rule-evaluated rule=audit
+  rule-matched rule=audit
+  rule-fired rule=audit
+  group-finished group=later state=exhausted selected= end=exhausted stop=none
+  execution-finished
+
+=== exhausted ===
+execution: completed
+summary: total=4 evaluated=4 not-evaluated=0 matched=3 unmatched=1 fired=1 skipped=0 failed=2 condition-failed=0 action-failed=2 panic-recovered=0
+
+group empty kind=first-match top-level-order=0 registration-index=0 priority=0 state=exhausted selected-rule= end-reason=exhausted stop=none
+
+group providers kind=first-fire top-level-order=1 registration-index=1 priority=0 state=exhausted selected-rule= end-reason=exhausted stop=none
+
+  rule rule/0 order=0 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=0
+    evaluated=true matched=false action-started=false action-success=false state=unmatched
+
+  rule rule/1 order=1 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=1
+    evaluated=true matched=true action-started=true action-success=false state=failed
+    failure: rule "rule/1" action failed: provider unavailable; continued=true
+
+  rule rule/2 order=2 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=2
+    evaluated=true matched=true action-started=true action-success=false state=failed
+    failure: rule "rule/2" action failed: provider unavailable; continued=true
+
+rule audit order=3 registration-index=2 priority=0
+  top-level-order=2
+  evaluated=true matched=true action-started=true action-success=true state=fired
+
+group later kind=first-fire top-level-order=3 registration-index=3 priority=0 state=exhausted selected-rule= end-reason=exhausted stop=none
+events:
+  execution-started
+  group-finished group=empty state=exhausted selected= end=exhausted stop=none
+  rule-evaluated rule=rule/0
+  rule-evaluated rule=rule/1
+  rule-matched rule=rule/1
+  rule-failed rule=rule/1
+  rule-evaluated rule=rule/2
+  rule-matched rule=rule/2
+  rule-failed rule=rule/2
+  group-finished group=providers state=exhausted selected= end=exhausted stop=none
+  rule-evaluated rule=audit
+  rule-matched rule=audit
+  rule-fired rule=audit
+  group-finished group=later state=exhausted selected= end=exhausted stop=none
+  execution-finished
+
+=== first_match ===
+execution: first-match
+summary: total=3 evaluated=1 not-evaluated=2 matched=1 unmatched=0 fired=0 skipped=0 failed=1 condition-failed=0 action-failed=1 panic-recovered=0
+
+group empty kind=first-match top-level-order=0 registration-index=0 priority=0 state=exhausted selected-rule= end-reason=exhausted stop=none
+
+group providers kind=first-match top-level-order=1 registration-index=1 priority=0 state=resolved selected-rule=rule/0 end-reason=execution-stopped stop=first-match
+
+  rule rule/0 order=0 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=0
+    evaluated=true matched=true action-started=true action-success=false state=failed
+    failure: rule "rule/0" action failed: provider unavailable; continued=true
+
+  rule rule/1 order=1 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=1
+    evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+    not-evaluated reason: execution-stopped
+
+rule audit order=2 registration-index=2 priority=0
+  top-level-order=2
+  evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+  not-evaluated reason: execution-stopped
+
+group later kind=first-fire top-level-order=3 registration-index=3 priority=0 state=not-entered selected-rule= end-reason=execution-stopped stop=first-match
+events:
+  execution-started
+  group-finished group=empty state=exhausted selected= end=exhausted stop=none
+  rule-evaluated rule=rule/0
+  rule-matched rule=rule/0
+  group-resolved group=providers state=resolved selected=rule/0 end=none stop=none
+  rule-failed rule=rule/0
+  group-finished group=providers state=resolved selected=rule/0 end=execution-stopped stop=first-match
+  execution-finished
+
+=== first_fire ===
+execution: first-fire
+summary: total=4 evaluated=2 not-evaluated=2 matched=2 unmatched=0 fired=1 skipped=0 failed=1 condition-failed=0 action-failed=1 panic-recovered=0
+
+group empty kind=first-match top-level-order=0 registration-index=0 priority=0 state=exhausted selected-rule= end-reason=exhausted stop=none
+
+group providers kind=first-fire top-level-order=1 registration-index=1 priority=0 state=resolved selected-rule=rule/1 end-reason=execution-stopped stop=first-fire
+
+  rule rule/0 order=0 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=0
+    evaluated=true matched=true action-started=true action-success=false state=failed
+    failure: rule "rule/0" action failed: provider unavailable; continued=true
+
+  rule rule/1 order=1 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=1
+    evaluated=true matched=true action-started=true action-success=true state=fired
+
+  rule rule/2 order=2 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=2
+    evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+    not-evaluated reason: execution-stopped
+
+rule audit order=3 registration-index=2 priority=0
+  top-level-order=2
+  evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+  not-evaluated reason: execution-stopped
+
+group later kind=first-fire top-level-order=3 registration-index=3 priority=0 state=not-entered selected-rule= end-reason=execution-stopped stop=first-fire
+events:
+  execution-started
+  group-finished group=empty state=exhausted selected= end=exhausted stop=none
+  rule-evaluated rule=rule/0
+  rule-matched rule=rule/0
+  rule-failed rule=rule/0
+  rule-evaluated rule=rule/1
+  rule-matched rule=rule/1
+  rule-fired rule=rule/1
+  group-resolved group=providers state=resolved selected=rule/1 end=none stop=none
+  group-finished group=providers state=resolved selected=rule/1 end=execution-stopped stop=first-fire
+  execution-finished
+
+=== condition_error ===
+execution: condition-error
+summary: total=3 evaluated=1 not-evaluated=2 matched=0 unmatched=0 fired=0 skipped=0 failed=1 condition-failed=1 action-failed=0 panic-recovered=0
+
+group empty kind=first-match top-level-order=0 registration-index=0 priority=0 state=exhausted selected-rule= end-reason=exhausted stop=none
+
+group providers kind=first-fire top-level-order=1 registration-index=1 priority=0 state=interrupted selected-rule= end-reason=execution-stopped stop=condition-error
+
+  rule rule/0 order=0 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=0
+    evaluated=true matched=false action-started=false action-success=false state=failed
+    failure: rule "rule/0" condition failed: provider unavailable; continued=false
+
+  rule rule/1 order=1 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=1
+    evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+    not-evaluated reason: execution-stopped
+
+rule audit order=2 registration-index=2 priority=0
+  top-level-order=2
+  evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+  not-evaluated reason: execution-stopped
+
+group later kind=first-fire top-level-order=3 registration-index=3 priority=0 state=not-entered selected-rule= end-reason=execution-stopped stop=condition-error
+events:
+  execution-started
+  group-finished group=empty state=exhausted selected= end=exhausted stop=none
+  rule-evaluated rule=rule/0
+  rule-failed rule=rule/0
+  group-finished group=providers state=interrupted selected= end=execution-stopped stop=condition-error
+  execution-finished
+
+=== action_error ===
+execution: action-error
+summary: total=3 evaluated=1 not-evaluated=2 matched=1 unmatched=0 fired=0 skipped=0 failed=1 condition-failed=0 action-failed=1 panic-recovered=0
+
+group empty kind=first-match top-level-order=0 registration-index=0 priority=0 state=exhausted selected-rule= end-reason=exhausted stop=none
+
+group providers kind=first-match top-level-order=1 registration-index=1 priority=0 state=resolved selected-rule=rule/0 end-reason=execution-stopped stop=action-error
+
+  rule rule/0 order=0 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=0
+    evaluated=true matched=true action-started=true action-success=false state=failed
+    failure: rule "rule/0" action failed: provider unavailable; continued=false
+
+  rule rule/1 order=1 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=1
+    evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+    not-evaluated reason: execution-stopped
+
+rule audit order=2 registration-index=2 priority=0
+  top-level-order=2
+  evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+  not-evaluated reason: execution-stopped
+
+group later kind=first-fire top-level-order=3 registration-index=3 priority=0 state=not-entered selected-rule= end-reason=execution-stopped stop=action-error
+events:
+  execution-started
+  group-finished group=empty state=exhausted selected= end=exhausted stop=none
+  rule-evaluated rule=rule/0
+  rule-matched rule=rule/0
+  group-resolved group=providers state=resolved selected=rule/0 end=none stop=none
+  rule-failed rule=rule/0
+  group-finished group=providers state=resolved selected=rule/0 end=execution-stopped stop=action-error
+  execution-finished
+
+=== context_skipped ===
+execution: context-canceled
+summary: total=3 evaluated=1 not-evaluated=2 matched=1 unmatched=0 fired=0 skipped=1 failed=0 condition-failed=0 action-failed=0 panic-recovered=0
+
+group empty kind=first-match top-level-order=0 registration-index=0 priority=0 state=exhausted selected-rule= end-reason=exhausted stop=none
+
+group providers kind=first-match top-level-order=1 registration-index=1 priority=0 state=resolved selected-rule=rule/0 end-reason=execution-stopped stop=context-canceled
+
+  rule rule/0 order=0 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=0
+    evaluated=true matched=true action-started=false action-success=false state=skipped
+    skip reason: context-done
+
+  rule rule/1 order=1 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=1
+    evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+    not-evaluated reason: execution-stopped
+
+rule audit order=2 registration-index=2 priority=0
+  top-level-order=2
+  evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+  not-evaluated reason: execution-stopped
+
+group later kind=first-fire top-level-order=3 registration-index=3 priority=0 state=not-entered selected-rule= end-reason=execution-stopped stop=context-canceled
+events:
+  execution-started
+  group-finished group=empty state=exhausted selected= end=exhausted stop=none
+  rule-evaluated rule=rule/0
+  rule-matched rule=rule/0
+  group-resolved group=providers state=resolved selected=rule/0 end=none stop=none
+  group-finished group=providers state=resolved selected=rule/0 end=execution-stopped stop=context-canceled
+  execution-finished
+
+=== context_after_fire ===
+execution: context-canceled
+summary: total=3 evaluated=1 not-evaluated=2 matched=1 unmatched=0 fired=1 skipped=0 failed=0 condition-failed=0 action-failed=0 panic-recovered=0
+
+group empty kind=first-match top-level-order=0 registration-index=0 priority=0 state=exhausted selected-rule= end-reason=exhausted stop=none
+
+group providers kind=first-fire top-level-order=1 registration-index=1 priority=0 state=resolved selected-rule=rule/0 end-reason=execution-stopped stop=context-canceled
+
+  rule rule/0 order=0 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=0
+    evaluated=true matched=true action-started=true action-success=true state=fired
+
+  rule rule/1 order=1 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=1
+    evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+    not-evaluated reason: execution-stopped
+
+rule audit order=2 registration-index=2 priority=0
+  top-level-order=2
+  evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+  not-evaluated reason: execution-stopped
+
+group later kind=first-fire top-level-order=3 registration-index=3 priority=0 state=not-entered selected-rule= end-reason=execution-stopped stop=context-canceled
+events:
+  execution-started
+  group-finished group=empty state=exhausted selected= end=exhausted stop=none
+  rule-evaluated rule=rule/0
+  rule-matched rule=rule/0
+  rule-fired rule=rule/0
+  group-resolved group=providers state=resolved selected=rule/0 end=none stop=none
+  group-finished group=providers state=resolved selected=rule/0 end=execution-stopped stop=context-canceled
+  execution-finished
+
+=== deadline ===
+execution: context-deadline-exceeded
+summary: total=3 evaluated=0 not-evaluated=3 matched=0 unmatched=0 fired=0 skipped=0 failed=0 condition-failed=0 action-failed=0 panic-recovered=0
+
+group empty kind=first-match top-level-order=0 registration-index=0 priority=0 state=not-entered selected-rule= end-reason=execution-stopped stop=context-deadline-exceeded
+
+group providers kind=first-fire top-level-order=1 registration-index=1 priority=0 state=not-entered selected-rule= end-reason=execution-stopped stop=context-deadline-exceeded
+
+  rule rule/0 order=0 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=0
+    evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+    not-evaluated reason: execution-stopped
+
+  rule rule/1 order=1 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=1
+    evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+    not-evaluated reason: execution-stopped
+
+rule audit order=2 registration-index=2 priority=0
+  top-level-order=2
+  evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+  not-evaluated reason: execution-stopped
+
+group later kind=first-fire top-level-order=3 registration-index=3 priority=0 state=not-entered selected-rule= end-reason=execution-stopped stop=context-deadline-exceeded
+events:
+  execution-started
+  execution-finished
+
+=== condition_panic ===
+execution: panic
+summary: total=3 evaluated=1 not-evaluated=2 matched=0 unmatched=0 fired=0 skipped=0 failed=1 condition-failed=1 action-failed=0 panic-recovered=1
+
+group empty kind=first-match top-level-order=0 registration-index=0 priority=0 state=exhausted selected-rule= end-reason=exhausted stop=none
+
+group providers kind=first-fire top-level-order=1 registration-index=1 priority=0 state=interrupted selected-rule= end-reason=execution-stopped stop=panic
+
+  rule rule/0 order=0 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=0
+    evaluated=true matched=false action-started=false action-success=false state=failed
+    failure: rule "rule/0" condition failed: rulite: rule "rule/0" condition panic (string); continued=false
+
+  rule rule/1 order=1 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=1
+    evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+    not-evaluated reason: execution-stopped
+
+rule audit order=2 registration-index=2 priority=0
+  top-level-order=2
+  evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+  not-evaluated reason: execution-stopped
+
+group later kind=first-fire top-level-order=3 registration-index=3 priority=0 state=not-entered selected-rule= end-reason=execution-stopped stop=panic
+events:
+  execution-started
+  group-finished group=empty state=exhausted selected= end=exhausted stop=none
+  rule-evaluated rule=rule/0
+  rule-failed rule=rule/0
+  group-finished group=providers state=interrupted selected= end=execution-stopped stop=panic
+  execution-finished
+
+=== action_panic ===
+execution: panic
+summary: total=3 evaluated=1 not-evaluated=2 matched=1 unmatched=0 fired=0 skipped=0 failed=1 condition-failed=0 action-failed=1 panic-recovered=1
+
+group empty kind=first-match top-level-order=0 registration-index=0 priority=0 state=exhausted selected-rule= end-reason=exhausted stop=none
+
+group providers kind=first-match top-level-order=1 registration-index=1 priority=0 state=resolved selected-rule=rule/0 end-reason=execution-stopped stop=panic
+
+  rule rule/0 order=0 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=0
+    evaluated=true matched=true action-started=true action-success=false state=failed
+    failure: rule "rule/0" action failed: rulite: rule "rule/0" action panic (string); continued=false
+
+  rule rule/1 order=1 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=1
+    evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+    not-evaluated reason: execution-stopped
+
+rule audit order=2 registration-index=2 priority=0
+  top-level-order=2
+  evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+  not-evaluated reason: execution-stopped
+
+group later kind=first-fire top-level-order=3 registration-index=3 priority=0 state=not-entered selected-rule= end-reason=execution-stopped stop=panic
+events:
+  execution-started
+  group-finished group=empty state=exhausted selected= end=exhausted stop=none
+  rule-evaluated rule=rule/0
+  rule-matched rule=rule/0
+  group-resolved group=providers state=resolved selected=rule/0 end=none stop=none
+  rule-failed rule=rule/0
+  group-finished group=providers state=resolved selected=rule/0 end=execution-stopped stop=panic
+  execution-finished
+
+=== earlier_hole_then_stop ===
+execution: condition-error
+summary: total=3 evaluated=2 not-evaluated=1 matched=1 unmatched=0 fired=1 skipped=0 failed=1 condition-failed=1 action-failed=0 panic-recovered=0
+
+group empty kind=first-match top-level-order=0 registration-index=0 priority=0 state=exhausted selected-rule= end-reason=exhausted stop=none
+
+group providers kind=first-match top-level-order=1 registration-index=1 priority=0 state=resolved selected-rule=rule/0 end-reason=resolved stop=none
+
+  rule rule/0 order=0 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=0
+    evaluated=true matched=true action-started=true action-success=true state=fired
+
+  rule rule/1 order=1 registration-index=1 priority=0
+    group=providers top-level-order=1 member-index=1
+    evaluated=false matched=false action-started=false action-success=false state=not-evaluated
+    not-evaluated reason: group-resolved
+
+rule audit order=2 registration-index=2 priority=0
+  top-level-order=2
+  evaluated=true matched=false action-started=false action-success=false state=failed
+  failure: rule "audit" condition failed: provider unavailable; continued=false
+
+group later kind=first-fire top-level-order=3 registration-index=3 priority=0 state=not-entered selected-rule= end-reason=execution-stopped stop=condition-error
+events:
+  execution-started
+  group-finished group=empty state=exhausted selected= end=exhausted stop=none
+  rule-evaluated rule=rule/0
+  rule-matched rule=rule/0
+  group-resolved group=providers state=resolved selected=rule/0 end=none stop=none
+  rule-fired rule=rule/0
+  group-finished group=providers state=resolved selected=rule/0 end=resolved stop=none
+  rule-evaluated rule=audit
+  rule-failed rule=audit
+  execution-finished
