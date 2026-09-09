@@ -25,11 +25,23 @@ func TestSparseAllMissAllocation(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for path, engine := range []*Engine[int]{engine, reused} {
+		entries := make([]Entry[int], len(rules))
+		for index, rule := range rules {
+			entries[index] = rule.Entry()
+		}
+		mixedSet, err := CompileEntries(entries...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mixed, err := NewEngineFromRuleSet(mixedSet)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for path, engine := range []*Engine[int]{engine, reused, mixed} {
 			var input int
 			var result Result
 			allocations := testing.AllocsPerRun(20, func() { result, err = engine.Fire(context.Background(), &input) })
-			if err != nil || result.counts.Unmatched != size || len(result.records) != 0 || result.trace != nil || result.diagnostics != nil || result.metadata != engine.snapshot.metadata {
+			if err != nil || result.counts.Unmatched != size || len(result.records) != 0 || result.groups != nil || result.trace != nil || result.diagnostics != nil || result.metadata != engine.snapshot.metadata {
 				t.Fatal("all-miss execution is not sparse")
 			}
 			if allocations != 0 || size > 1 && allocations > previous {

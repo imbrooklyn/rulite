@@ -83,11 +83,27 @@ func (i RuleInfo) ID() RuleID { return i.metadata.id }
 // Priority returns the compiled priority.
 func (i RuleInfo) Priority() Priority { return i.metadata.priority }
 
-// Order returns the zero-based compiled execution position.
+// Order returns the zero-based flattened executable position, excluding containers.
 func (i RuleInfo) Order() int { return i.order }
 
-// RegistrationIndex returns the original zero-based Compile or NewEngine argument position.
+// RegistrationIndex returns the original top-level construction argument position.
+// Members use their group's CompileEntries position; MemberIndex identifies
+// their independent local registration position.
 func (i RuleInfo) RegistrationIndex() int { return i.metadata.registrationIndex }
+
+// TopLevelOrder returns the compiled top-level position of this rule or its group.
+func (i RuleInfo) TopLevelOrder() int { return i.metadata.topLevelOrder }
+
+// MemberIndex returns the local registration position, or zero and false for a top-level rule.
+func (i RuleInfo) MemberIndex() (int, bool) { return i.metadata.memberIndex, i.metadata.group != nil }
+
+// GroupID returns the containing group identity, or an empty ID and false.
+func (i RuleInfo) GroupID() (GroupID, bool) {
+	if i.metadata.group == nil {
+		return "", false
+	}
+	return i.metadata.group.id, true
+}
 
 // Name returns the normalized display name, or empty when unspecified.
 func (i RuleInfo) Name() string { return i.metadata.details.value().name }

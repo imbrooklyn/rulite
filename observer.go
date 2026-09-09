@@ -118,8 +118,9 @@ type eventSummary struct {
 func (e Event) Kind() EventKind { return e.kind }
 
 // Rule returns metadata for a rule event, or a zero view and false otherwise.
-// Order is the zero-based compiled position; RegistrationIndex is the original
-// Compile/NewEngine position. RuleID identity and descriptive metadata are unchanged.
+// Order is the flattened executable position; RegistrationIndex is the original
+// top-level argument position. GroupID, MemberIndex, and TopLevelOrder provide
+// group coordinates. RuleID identity and descriptive metadata are unchanged.
 func (e Event) Rule() (RuleInfo, bool) {
 	if e.rule == nil {
 		return RuleInfo{}, false

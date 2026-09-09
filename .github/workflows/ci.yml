@@ -37,7 +37,7 @@ jobs:
       - name: Fuzz smoke
         shell: bash
         run: |
-          for target in FuzzCompileMetadata FuzzRuleValidation FuzzExecutionOutcomes FuzzCombinatorNesting FuzzExecutionErrorTree FuzzObservationStream; do
+          for target in FuzzCompileMetadata FuzzRuleValidation FuzzExecutionOutcomes FuzzCombinatorNesting FuzzExecutionErrorTree FuzzObservationStream FuzzGroupExecution; do
             go test . -run '^$' -fuzz "^${target}$" -fuzztime=5s -parallel=2 || exit 1
           done
 
@@ -61,7 +61,7 @@ jobs:
           cache: false
       - name: Structural allocation and ownership gates
         working-directory: candidate
-        run: go test . -run '^(TestSparseAllMissAllocation|TestMetadataDoesNotRetainExecutables|TestRuleSetSharesExecutableSnapshot)$' -count=1 -v
+        run: go test . -run '^(TestSparseAllMissAllocation|TestSparseGroupHoles|TestMetadataDoesNotRetainExecutables|TestRuleSetSharesExecutableSnapshot)$' -count=1 -v
       - name: Repeated benchmark samples
         working-directory: candidate
         env:

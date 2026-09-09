@@ -26,14 +26,39 @@ func execute[T any](ctx context.Context, input *T, snapshot *compiledSnapshot[T]
 		return x.finish(ctx, start)
 	}
 
+	if len(snapshot.entries) == 0 {
+		if executeRules(ctx, input, snapshot, config, &x, compiledEntry{end: len(snapshot.callbacks)}) {
+			return x.finish(ctx, start)
+		}
+	} else {
+		x.result.groups = make([]groupRecord, len(snapshot.metadata.groups))
+		for _, entry := range snapshot.entries {
+			if executeRules(ctx, input, snapshot, config, &x, entry) {
+				return x.finish(ctx, start)
+			}
+		}
+	}
+	x.result.stop = StopCompleted
+	return x.finish(ctx, start)
+}
+
+// executeRules is the only callback state machine for top-level rules and members.
+func executeRules[T any](ctx context.Context, input *T, snapshot *compiledSnapshot[T], config executionConfig, x *execution, entry compiledEntry) bool {
+	if entry.group != nil {
+		if x.contextDone(ctx) {
+			return true
+		}
+		x.result.groups[entry.group.index] = groupRecord{state: GroupInterrupted, skippedFrom: entry.end}
+	}
 	conditionCtx := ctx
 	// A nested Fire must not write into the enclosing condition's recording.
 	if !config.trace && recorderFrom(ctx) != nil {
 		conditionCtx = context.WithValue(ctx, conditionRecorderKey{}, (*conditionRecording)(nil))
 	}
-	for order, callbacks := range snapshot.callbacks {
-		if x.contextDone(ctx) {
-			return x.finish(ctx, start)
+	for order := entry.start; order < entry.end; order++ {
+		callbacks := snapshot.callbacks[order]
+		if (entry.group == nil || order != entry.start) && x.contextDone(ctx) {
+			return true
 		}
 		id := snapshot.metadata.rules[order].id
 		var node *conditionRecording
@@ -43,6 +68,7 @@ func execute[T any](ctx context.Context, input *T, snapshot *compiledSnapshot[T]
 			conditionCtx = context.WithValue(ctx, conditionRecorderKey{}, node)
 			conditionStart = time.Now()
 		}
+		x.result.evaluatedThrough = order + 1
 		x.result.counts.Evaluated++
 		matched, err, panicErr := callCondition(conditionCtx, input, callbacks.condition, id, config.panic)
 		if config.trace {
@@ -63,17 +89,17 @@ func execute[T any](ctx context.Context, input *T, snapshot *compiledSnapshot[T]
 			x.result.stop = StopPanic
 			x.observeRule(ctx, EventRuleFailed, order, ConditionOutcomeError)
 			x.contextDone(ctx)
-			return x.finish(ctx, start)
+			return true
 		}
 		if err != nil {
 			x.fail(order, ConditionPhase, err, config.policy.conditionErrors == ContinueOnError, false)
 			x.observeRule(ctx, EventRuleFailed, order, ConditionOutcomeError)
 			if x.contextDone(ctx) {
-				return x.finish(ctx, start)
+				return true
 			}
 			if config.policy.conditionErrors == StopOnError {
 				x.result.stop = StopConditionError
-				return x.finish(ctx, start)
+				return true
 			}
 			continue
 		}
@@ -81,11 +107,14 @@ func execute[T any](ctx context.Context, input *T, snapshot *compiledSnapshot[T]
 			x.result.counts.Unmatched++
 			x.observeRule(ctx, EventRuleEvaluated, order, ConditionOutcomeFalse)
 			if x.contextDone(ctx) {
-				return x.finish(ctx, start)
+				return true
 			}
 			continue
 		}
 
+		if entry.group != nil && entry.group.kind == GroupFirstMatch {
+			x.resolveGroup(entry.group, id)
+		}
 		x.observeRule(ctx, EventRuleEvaluated, order, ConditionOutcomeTrue)
 		x.observeRule(ctx, EventRuleMatched, order, ConditionOutcomeTrue)
 		// A successful match is preserved even when its action cannot start.
@@ -93,7 +122,7 @@ func execute[T any](ctx context.Context, input *T, snapshot *compiledSnapshot[T]
 			x.record(order, RuleSkipped)
 			x.result.counts.Matched++
 			x.result.counts.Skipped++
-			return x.finish(ctx, start)
+			return true
 		}
 		var actionStart time.Time
 		if config.trace {
@@ -108,7 +137,7 @@ func execute[T any](ctx context.Context, input *T, snapshot *compiledSnapshot[T]
 			x.result.stop = StopPanic
 			x.observeRule(ctx, EventRuleFailed, order, ConditionOutcomeNotEvaluated)
 			x.contextDone(ctx)
-			return x.finish(ctx, start)
+			return true
 		}
 		if err != nil {
 			x.fail(order, ActionPhase, err, config.policy.actionErrors == ContinueOnError, false)
@@ -117,26 +146,35 @@ func execute[T any](ctx context.Context, input *T, snapshot *compiledSnapshot[T]
 			x.record(order, RuleFired)
 			x.result.counts.Matched++
 			x.result.counts.Fired++
+			if entry.group != nil && entry.group.kind == GroupFirstFire {
+				x.resolveGroup(entry.group, id)
+			}
 			x.observeRule(ctx, EventRuleFired, order, ConditionOutcomeNotEvaluated)
 		}
 		if x.contextDone(ctx) {
-			return x.finish(ctx, start)
+			return true
 		}
 		if err != nil && config.policy.actionErrors == StopOnError {
 			x.result.stop = StopActionError
-			return x.finish(ctx, start)
+			return true
 		}
 		if config.policy.stop == StopOnFirstMatch {
 			x.result.stop = StopFirstMatch
-			return x.finish(ctx, start)
+			return true
 		}
 		if err == nil && config.policy.stop == StopOnFirstFire {
 			x.result.stop = StopFirstFire
-			return x.finish(ctx, start)
+			return true
+		}
+		if entry.group != nil && x.result.groups[entry.group.index].state == GroupResolved {
+			x.result.groups[entry.group.index].skippedFrom = order + 1
+			return false
 		}
 	}
-	x.result.stop = StopCompleted
-	return x.finish(ctx, start)
+	if entry.group != nil {
+		x.result.groups[entry.group.index].state = GroupExhausted
+	}
+	return false
 }
 
 func (x *execution) record(order int, state RuleState) {

@@ -65,7 +65,7 @@ policy := rulite.DefaultPolicy().
 result, err := engine.Fire(ctx, &input, rulite.WithPolicy(policy))
 ```
 
-`StopOnFirstMatch` ends after the first matched rule's action attempt, including a continued action error. `StopOnFirstFire` ends only after a successful action; `ContinueOnError` on actions enables fallback. Both policies stop the entire execution. Local selection groups are not implemented.
+`StopOnFirstMatch` ends after the first matched rule's action attempt, including a continued action error. `StopOnFirstFire` ends only after a successful action; `ContinueOnError` on actions enables fallback. Both policies stop the entire execution, including when the selected rule belongs to a group.
 
 Options apply left to right. `WithPolicy` replaces the complete policy, `WithPanicMode` replaces the panic mode, `WithObserver` replaces the observer, `WithTrace` is idempotent, and a zero `FireOption` does nothing. Each option is validated when reached; a later valid option cannot repair an earlier invalid one.
 
@@ -103,7 +103,7 @@ The default `RecoverPanics` converts a business callback panic to `*PanicError`,
 
 ## Results and explainability
 
-Result, Explanation, and Trace derive rule outcomes from the same immutable execution ledger. Queries never rerun callbacks. `Order()` is the zero-based execution position; `RegistrationIndex()` is the original zero-based `Compile` or `NewEngine` argument position. `Rule(id)` handles unknown IDs with `false`. `Matched()`, `Fired()`, and `Failures()` preserve observation order.
+Result, Explanation, and Trace derive rule outcomes from the same immutable execution ledger. Queries never rerun callbacks. `Order()` is the zero-based flattened executable position; `RegistrationIndex()` is the original top-level construction argument position. Members also expose their local registration through `MemberIndex()` and their containing group's compiled position through `TopLevelOrder()`. `Rule(id)` handles unknown IDs with `false`. `Matched()`, `Fired()`, and `Failures()` preserve observation order.
 
 Counts obey these partitions; phase failures include recovered panics:
 
@@ -121,7 +121,35 @@ A zero Result is safely queryable, with `Executed() == false`, zero counts, `Sto
 
 `WithTrace()` adds monotonic durations and observed `All`/`Any`/`Not` child outcomes. Trace covers every engine rule and does not truncate. A tree root has index -1; children use argument indexes. Short-circuited children explicitly report not evaluated and a short-circuit reason. Uncalled functions have opaque leaf identity; their internal operator cannot be known without calling them. Plain Go callbacks have no child tree. A callback that invokes multiple combinators or changes a combinator's outcome is opaque. Trace cannot explain arbitrary Go control flow.
 
-For 100 pricing rules, `Explain().Rules()` gives the complete execution order; `Matched` and `ActionStarted` distinguish eligibility from action attempts; `Fired` and phase failures describe action outcomes. Untouched suffix reasons and the global StopReason explain termination. `Result.Failures()` and the error tree preserve every observed failure. This proves action execution outcomes, not which fields changed. A failed action can write a field, a successful action can write nothing, and a later action can overwrite a prior value. Record `AppliedBy RuleID` in business state when field attribution matters; the [pricing example](../examples/pricing) demonstrates it.
+For 100 pricing rules, `Explain().Rules()` gives the complete execution order; `Matched` and `ActionStarted` distinguish eligibility from action attempts; `Fired` and phase failures describe action outcomes. Local hole and untouched suffix reasons, together with the global StopReason, explain selection and termination. `Result.Failures()` and the error tree preserve every observed failure. This proves action execution outcomes, not which fields changed. A failed action can write a field, a successful action can write nothing, and a later action can overwrite a prior value. Record `AppliedBy RuleID` in business state when field attribution matters; the [pricing example](../examples/pricing) demonstrates it.
+
+## Local selection groups
+
+`FirstMatchGroup(id, members...)` and `FirstFireGroup(id, members...)` construct immutable `Group[T]` definitions from typed rules. Constructors copy the member slice; `Members()` returns a copy in local registration order. A nil member slice is an empty group. `WithPriority` returns a new group and defaults to zero independently of member priorities. No nested groups or local error policies are supported.
+
+`Rule.Entry()` and `Group.Entry()` produce concrete `Entry[T]` values for `CompileEntries(entries...)`. The existing `Compile(rules...)` and `NewEngine(rules...)` signatures remain available. Both compilation paths use the same validation and ordering algorithm. Empty entry lists are valid. A zero Entry is an invalid zero Rule; a zero Group has an invalid empty ID. Definitions cannot contain nil rule or group pointers because their construction API uses concrete values.
+
+GroupID follows RuleID's 1-128 byte syntax and exact comparison, in an independent namespace. GroupIDs are unique across the set. RuleIDs are unique across every top-level rule and all members, including across groups. Validation scans top-level registration order: group ID syntax and duplicate checks precede its members, whose rule issues retain the ordinary order. Invalid IDs are excluded from duplicate checks. `ValidationIssue.Index()` is the top-level registration position; `MemberIndex()` returns a local registration position and presence boolean; `GroupID()` returns a valid containing group ID when available. Member issues remain indexed by `IssuesForRule`.
+
+Top-level entries sort by priority descending and registration ascending. Each group's members sort independently by the same criteria. Member priority never moves a group or competes with another top-level entry. Rule counts and `RuleSet.Len()` include all executable rules and members, excluding containers. `RuleSet.Rules()`, `Result.Rule`, Explain, Trace, and rule events all describe the same flattened executable order.
+
+| Coordinate | Rule views | GroupResult |
+| --- | --- | --- |
+| `Order()` | Flattened executable position, excluding containers | Compiled top-level entry position |
+| `TopLevelOrder()` | Compiled position of the rule or its containing group | Available as Order |
+| `RegistrationIndex()` | Original top-level argument position; members use their group's position | Original CompileEntries argument position |
+| `MemberIndex()` | Original local member position and true; top-level rules return zero and false | Not applicable |
+| `GroupID()` | Containing group identity and true; top-level rules return empty and false | Identity available as ID |
+
+First-match selects on the first condition returning true, nil. Its action is attempted once subject to the existing context and panic boundaries; a continued action error still resolves the group. First-fire selects only when an action returns nil. Continued action errors permit later providers to observe partial effects and try again. It guarantees at most one successful action, not exactly one external effect. Conditions remain read-only; no rollback, retry, or input clone is added.
+
+Global condition/action error modes apply unchanged to members. Panic, observed context cancellation, phase error stop, and global selection all take precedence over advancing out of a resolved group. Local advancement continues to the next top-level entry, so a following audit can run under EvaluateAll. All continued errors remain in Failure and ExecutionError, even after a successful fallback or normal completion.
+
+`Result.Group(id)` returns an immutable GroupResult and presence boolean; unknown IDs and zero Results return a zero view and false. `Result.Groups()` and `Explanation.Groups()` return copied views in top-level order. Views expose identity, kind, priority, order, registration, state, entry, resolution, and selected rule. State is `GroupNotEntered` before the initial group context boundary passes, `GroupResolved` when its criterion is observed, `GroupExhausted` after all members finish without selection (including an empty group), or `GroupInterrupted` when global termination stops an unresolved group. Exhaustion is not a business error by itself; all-failed first-fire candidates still retain their individual failures.
+
+Resolution is a fact independent of the global stop: first-match selection survives an action skipped by cancellation or a failed/panicking action; first-fire selection survives cancellation after a successful action. A selected rule does not prove that an action started or succeeded; inspect its rule outcome. If global termination wins at that boundary, untouched members have `NotEvaluatedExecutionStopped`. Only members bypassed by actual local advancement use `NotEvaluatedGroupResolved`. Later global stops do not erase earlier local hole reasons. These members are not evaluated, never unmatched or matched-and-skipped.
+
+The ledger records an evaluated frontier and one record per group, including any locally bypassed suffix. Later rules can run after a hole without being mistaken for untouched rules. Result, Explain, Trace, and rule events share these facts; queries never replay selection. Uncalled members emit no rule events and have zero callback durations. Rule events expose group coordinates through RuleInfo. Dedicated group lifecycle events and broader hierarchical diagnostics remain planned; see the [working consumer example](../group_example_test.go).
 
 ## Observation and diagnostics
 
@@ -160,7 +188,7 @@ Validation, ordering, normalization, and indexing belong to construction. Fire u
 
 CI retains Go 1.27 and checks allocation and immutable ownership guarantees independently of timing. Benchmark sampling builds each compared revision outside measurement, runs repeated samples on the same host, and preserves raw output and environment metadata as artifacts. Timing comparisons use an explicit tolerance and paired statistical interval; they are advisory. The [benchmark method](benchmarks.md#repeatable-regression-sampling) describes the limits. Performance tooling uses the Python standard library and adds no Go runtime dependency.
 
-RuleGroup, CEL, dynamic definitions, hot reload, runtime version/revision metadata, and OpenTelemetry are not implemented. See the [roadmap](roadmap.md) for later goals.
+CEL, dynamic definitions, hot reload, runtime version/revision metadata, and OpenTelemetry are not implemented. See the [roadmap](roadmap.md) for later goals.
 
 The required v0.4 CEL Condition adapter will compile expressions before execution, require a boolean result type, and map evaluation errors and unknown outcomes to ordinary Condition errors. It will use explicit typed bindings, documented field mapping, and adapter-owned resource limits while preserving the root callback signatures and standard-library dependency boundary. CEL actions are outside that plan.
 

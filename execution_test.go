@@ -302,7 +302,7 @@ func checkResultConsistency(t testing.TB, result rulite.Result) {
 				t.Fatal("invalid skipped state")
 			}
 		case rulite.RuleNotEvaluated:
-			if x.NotEvaluatedReason() != rulite.NotEvaluatedExecutionStopped || x.Matched() {
+			if (x.NotEvaluatedReason() != rulite.NotEvaluatedExecutionStopped && x.NotEvaluatedReason() != rulite.NotEvaluatedGroupResolved) || x.Matched() {
 				t.Fatal("invalid not-evaluated state")
 			}
 		case rulite.RuleFailed:

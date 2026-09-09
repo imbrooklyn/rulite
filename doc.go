@@ -6,11 +6,14 @@
 // breaking ties.
 // Compile exposes the same validated snapshot as a reusable RuleSet.
 // NewEngineFromRuleSet shares that snapshot with independent engine defaults.
+// CompileEntries accepts Rule.Entry and Group.Entry values for mixed definitions.
+// FirstMatchGroup and FirstFireGroup select locally, then continue to the next
+// top-level entry unless global policy, context, or panic terminates execution.
 // Names, descriptions, and tags are descriptive metadata; RuleID alone is identity.
 //
 // Engine.Fire visits each condition and, when matched, its action sequentially.
 // Earlier action mutations are visible to later conditions. The default policy
-// evaluates all rules but stops on the first error. StopOnFirstMatch ends after
+// visits all entries with local group selection, stopping on the first error. StopOnFirstMatch ends after
 // a matched action attempt; StopOnFirstFire supports fallback past failed actions
 // when action errors use ContinueOnError. Errors and recovered panics preserve a
 // partial Result and never undo side effects.

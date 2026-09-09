@@ -4,7 +4,8 @@ package rulite
 type StopMode uint8
 
 const (
-	// EvaluateAll visits every rule unless an error, panic, or context stops it.
+	// EvaluateAll visits every top-level entry unless an error, panic, or context
+	// stops it. Groups still apply their local member selection.
 	EvaluateAll StopMode = iota
 	// StopOnFirstMatch stops after the first matched rule's action attempt.
 	StopOnFirstMatch

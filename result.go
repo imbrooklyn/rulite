@@ -65,6 +65,9 @@ const (
 	NotEvaluatedNone NotEvaluatedReason = iota
 	// NotEvaluatedExecutionStopped means execution ended before this condition.
 	NotEvaluatedExecutionStopped
+	// NotEvaluatedGroupResolved means local selection bypassed this member.
+	// A global stop at the selection boundary instead uses execution-stopped.
+	NotEvaluatedGroupResolved
 )
 
 // StopReason is the global reason execution ended. Panic has precedence over
@@ -124,13 +127,15 @@ func (s StopReason) String() string {
 // callbacks, observers, input, context, or options. User errors and panic values
 // remain caller-owned read-only values. All slice accessors return copies.
 type Result struct {
-	metadata    *snapshotMetadata
-	counts      Counts
-	stop        StopReason
-	records     []executionRecord
-	failures    []Failure
-	trace       *traceData
-	diagnostics []Diagnostic
+	metadata         *snapshotMetadata
+	counts           Counts
+	stop             StopReason
+	records          []executionRecord
+	failures         []Failure
+	trace            *traceData
+	diagnostics      []Diagnostic
+	evaluatedThrough int
+	groups           []groupRecord
 }
 
 // Diagnostics returns a defensive copy of observation failures. A single
@@ -140,8 +145,8 @@ type Result struct {
 // The zero Result returns an empty collection, which may be nil.
 func (r Result) Diagnostics() []Diagnostic { return slices.Clone(r.diagnostics) }
 
-// Only non-default evaluated outcomes occupy records. The evaluated prefix
-// determines ordinary unmatched rules and the untouched suffix.
+// Only non-default evaluated outcomes occupy records. The frontier and group
+// suffix facts distinguish ordinary misses, local holes, and global termination.
 type executionRecord struct {
 	order        int
 	state        RuleState
@@ -203,7 +208,14 @@ func (r Result) Rule(id RuleID) (RuleExecution, bool) {
 
 func (r Result) ruleAt(order int) RuleExecution {
 	x := RuleExecution{metadata: r.metadata.rules[order], order: order}
-	if order >= r.counts.Evaluated {
+	if group := x.metadata.group; group != nil && group.index < len(r.groups) {
+		record := r.groups[group.index]
+		if record.state == GroupResolved && order >= record.skippedFrom {
+			x.notEvaluated = NotEvaluatedGroupResolved
+			return x
+		}
+	}
+	if order >= r.evaluatedThrough {
 		x.notEvaluated = NotEvaluatedExecutionStopped
 		return x
 	}
@@ -255,11 +267,29 @@ type RuleExecution struct {
 // ID returns the rule identity.
 func (x RuleExecution) ID() RuleID { return x.metadata.id }
 
-// Order returns the zero-based compiled position.
+// Order returns the zero-based flattened executable position, excluding containers.
 func (x RuleExecution) Order() int { return x.order }
 
-// RegistrationIndex returns the original zero-based Compile or NewEngine argument position.
+// RegistrationIndex returns the original top-level construction argument position.
+// Members use their group's CompileEntries position; MemberIndex identifies
+// their independent local registration position.
 func (x RuleExecution) RegistrationIndex() int { return x.metadata.registrationIndex }
+
+// TopLevelOrder returns the compiled top-level position of this rule or its group.
+func (x RuleExecution) TopLevelOrder() int { return x.metadata.topLevelOrder }
+
+// MemberIndex returns the local registration position, or zero and false for a top-level rule.
+func (x RuleExecution) MemberIndex() (int, bool) {
+	return x.metadata.memberIndex, x.metadata.group != nil
+}
+
+// GroupID returns the containing group identity, or an empty ID and false.
+func (x RuleExecution) GroupID() (GroupID, bool) {
+	if x.metadata.group == nil {
+		return "", false
+	}
+	return x.metadata.group.id, true
+}
 
 // Priority returns the compiled priority.
 func (x RuleExecution) Priority() Priority { return x.metadata.priority }

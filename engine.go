@@ -62,6 +62,8 @@ func NewEngineFromRuleSet[T any](set *RuleSet[T], options ...FireOption) (*Engin
 
 // Fire executes the captured snapshot sequentially in compiled order. Each
 // condition is followed immediately by its action when it returns true, nil.
+// Groups select locally and bypass remaining members once resolved. Global
+// policy, panic, and context termination take precedence over local advancement.
 // Earlier action mutations are visible to later conditions, including partial
 // mutations before an error. Fire never rolls back, retries, or compensates.
 // Conditions must not mutate input; the engine does not copy or inspect T.

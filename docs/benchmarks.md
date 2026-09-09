@@ -293,6 +293,41 @@ Measured on 2026-09-09, Apple M4 Pro, 12 logical CPUs/default GOMAXPROCS 12, mac
 | `first_panic/all_miss/rules_1000` | 30,235.000 | 7,440 | 7 |
 | `trace_noop/all_miss/rules_1000` | 97,381.000 | 258,528 | 2,004 |
 
+## Local group measurements
+
+Measured on 2026-09-09: Apple M4 Pro, 12 logical CPUs/default GOMAXPROCS 12, macOS 26.5.2 (25F84), Go 1.27.0, darwin/arm64. Default optimization and GC settings; no race instrumentation. The complete suite ran 143 workloads, three 100 ms samples each. The table reports metric medians. These short single-machine measurements are not an SLA or an estimate of tail latency.
+
+```sh
+go test . -run '^$' -bench . -benchmem -benchtime=100ms -count=3
+go test . -run '^$' -bench '^(BenchmarkFireGroups|BenchmarkCompileEntries)$' -benchmem -benchtime=100ms -count=3
+```
+
+[Group workloads](../group_benchmark_test.go) prepare definitions and engines outside Fire timing, reset input each iteration, report allocations, and retain results and counters. Each Fire includes one group followed by a successful audit rule. Start, middle, and end select member positions 0, N/2, and N-1; all-miss evaluates every member before audit. The action-error case fails the first action: first-match resolves there, while first-fire tries the second member successfully. All use EvaluateAll with continued action errors. Counts, stop, group state, error presence, and action counters are checked inside timing; full ledger checks run outside it. Fire rows include the group lookup used for verification.
+
+CompileEntries timing starts from frozen definitions, partitions 1,000 rules into 1, 10, or 100 groups, and includes validation, independent sorting, metadata, and indexes. Each group resolves once in the post-timing correctness check. Definition construction and callback execution are excluded from compile timing; these group partitions have different sorting work.
+
+| Benchmark | ns/op | B/op | allocs/op |
+| --- | ---: | ---: | ---: |
+| `BenchmarkCompile/rules_1000` | 205,061.000 | 144,904 | 12 |
+| `BenchmarkNewEngineFromRuleSet/rules_1000` | 11.440 | 32 | 1 |
+| `BenchmarkFireScale/all_miss/rules_10` | 153.200 | 0 | 0 |
+| `BenchmarkFireScale/all_miss/rules_1000` | 9,853.000 | 0 | 0 |
+| `BenchmarkFireScale/all_miss/rules_10000` | 98,666.000 | 0 | 0 |
+| `BenchmarkCompileEntries/groups_1/rules_1000` | 207,130.000 | 191,416 | 31 |
+| `BenchmarkCompileEntries/groups_10/rules_1000` | 157,483.000 | 192,600 | 34 |
+| `BenchmarkCompileEntries/groups_100/rules_1000` | 117,567.000 | 204,728 | 34 |
+| `BenchmarkFireGroups/first-match/start/members_1000` | 143.300 | 104 | 3 |
+| `BenchmarkFireGroups/first-match/action_error/members_1000` | 191.300 | 264 | 7 |
+| `BenchmarkFireGroups/first-fire/start/members_1000` | 142.600 | 104 | 3 |
+| `BenchmarkFireGroups/first-fire/middle/members_1000` | 5,017.000 | 104 | 3 |
+| `BenchmarkFireGroups/first-fire/end/members_1000` | 10,176.000 | 104 | 3 |
+| `BenchmarkFireGroups/first-fire/all_miss/members_1000` | 10,090.000 | 56 | 2 |
+| `BenchmarkFireGroups/first-fire/action_error/members_1000` | 225.100 | 360 | 8 |
+
+No-group all-miss still allocates zero bytes across all tested scales and all three construction paths. Grouped all-miss keeps one group record; the benchmark's successful audit adds one sparse rule record. Resolving at the start retains one group record and two rule records regardless of the number of uncalled members. The structural test separately confirms bounded storage at 10, 100, and 10,000 members without per-member hole objects.
+
+Compilation now stores explicit top-level and member coordinates and group boundaries. Its memory and timing costs are higher than the historical pure-rule baseline; reusable engine construction still shares the snapshot with one 32-byte allocation. No-group Fire timing is also higher in these samples. The dated measurements do not isolate all sources of timing variation or establish unchanged CPU cost. Correct results, zero-allocation all-miss execution without groups, and callback-free retained metadata remain structural gates.
+
 ## Structural performance guarantees
 
 Ordinary no-trace, no-observer all-miss Fire measured 0 B/op and 0 allocs/op at every tested scale. The allocation regression test also checks that allocation does not grow with rule count and that no per-rule outcome records are created for misses. This guarantee concerns framework execution storage; caller callbacks and contexts may allocate.

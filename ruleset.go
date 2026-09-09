@@ -1,7 +1,7 @@
 package rulite
 
 // RuleSet holds an immutable, validated and sorted snapshot of typed rules.
-// Construct it with Compile. A nil pointer and the zero value are invalid,
+// Construct it with Compile or CompileEntries. A nil pointer and the zero value are invalid,
 // distinct from a valid empty set. All queries are safe on nil and zero sets.
 // Copies share the snapshot; getters never expose callbacks or mutable storage.
 // A set supports concurrent queries and construction of independent engines.
@@ -29,10 +29,32 @@ func Compile[T any](rules ...Rule[T]) (*RuleSet[T], error) {
 	return &RuleSet[T]{snapshot: snapshot}, nil
 }
 
+// CompileEntries validates and freezes mixed top-level rules and selection groups.
+// Use rule.Entry() and group.Entry() to keep the business state type consistent.
+// Top-level entries sort by descending priority, then registration order;
+// members sort independently within each group using the same ordering.
+// Group priority defaults to zero and never derives from member priorities.
+// Rule IDs are unique across all rules and members; Group IDs are unique in
+// their own namespace. Empty groups and an empty entry list are valid.
+//
+// Validation visits top-level registration order, checking a group's ID before
+// its members in local registration order. Rule issue order matches Compile.
+// Invalid IDs do not participate in duplicate detection. Failure returns nil
+// and *ValidationError. No callbacks run, and the supplied slice is not retained.
+// Zero entries are invalid zero rules; zero groups are rejected by their ID.
+func CompileEntries[T any](entries ...Entry[T]) (*RuleSet[T], error) {
+	snapshot, err := compileDefinitions(definitionList[T]{entries: entries})
+	if err != nil {
+		return nil, err
+	}
+	return &RuleSet[T]{snapshot: snapshot}, nil
+}
+
 // Valid reports whether the set was successfully compiled, including an empty set.
 func (s *RuleSet[T]) Valid() bool { return s != nil && s.snapshot != nil }
 
-// Len returns the rule count, or zero for a nil or uninitialized set.
+// Len counts top-level rules and all members, excluding group containers.
+// It returns zero for a nil or uninitialized set.
 func (s *RuleSet[T]) Len() int {
 	if !s.Valid() {
 		return 0

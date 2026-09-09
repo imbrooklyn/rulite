@@ -55,11 +55,21 @@ type RuleTrace struct {
 // ID returns the rule identity.
 func (t RuleTrace) ID() RuleID { return t.execution.ID() }
 
-// Order returns the zero-based compiled position.
+// Order returns the zero-based flattened executable position, excluding containers.
 func (t RuleTrace) Order() int { return t.execution.Order() }
 
-// RegistrationIndex returns the original zero-based Compile or NewEngine argument position.
+// RegistrationIndex returns the original top-level construction argument position.
+// A member uses its group's position; MemberIndex supplies local registration.
 func (t RuleTrace) RegistrationIndex() int { return t.execution.RegistrationIndex() }
+
+// TopLevelOrder returns the compiled top-level position of this rule or its group.
+func (t RuleTrace) TopLevelOrder() int { return t.execution.TopLevelOrder() }
+
+// MemberIndex returns the local registration position, or zero and false for a top-level rule.
+func (t RuleTrace) MemberIndex() (int, bool) { return t.execution.MemberIndex() }
+
+// GroupID returns the containing group identity, or an empty ID and false.
+func (t RuleTrace) GroupID() (GroupID, bool) { return t.execution.GroupID() }
 
 // Priority returns the compiled priority.
 func (t RuleTrace) Priority() Priority { return t.execution.Priority() }

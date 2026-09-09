@@ -92,6 +92,16 @@ Both construction paths produce identical validation issues, priority order, reg
 
 Before `When`, optionally add `Name`, `Description`, or `Tags` to the builder. Names and descriptions have surrounding whitespace removed. Tags are trimmed, empty values dropped, and exact duplicates removed in first-occurrence order. Metadata never changes RuleID identity. `set.Rule(id)` returns immutable `RuleInfo` and a presence boolean; `set.Rules()` lists metadata in execution order. Tags and view slices are defensive copies. Result, Explain, and Trace rule views expose the same descriptive metadata. See the compiling [reusable pricing example](ruleset_example_test.go), which uses only the root package and demonstrates both construction paths.
 
+## Local selection groups
+
+Use `FirstMatchGroup(id, members...)` for one eligible rule or `FirstFireGroup(id, members...)` for provider fallback. Both return immutable `Group[T]` values. Assemble mixed definitions with `CompileEntries(providers.Entry(), audit.Entry())`, then use `NewEngineFromRuleSet(set)`. The [compiling payment example](group_example_test.go) selects a provider and runs the following audit rule in the same Fire.
+
+Top-level rules and groups sort by priority descending, then registration order. Members sort independently inside each group. Group priority defaults to zero; `WithPriority` sets it explicitly without inspecting member priorities. RuleID is unique across the whole set; GroupID follows the same syntax in an independent namespace. Empty groups are valid and exhaust without selecting a rule.
+
+First-match attempts the selected action once; even a continued action error resolves that group. First-fire resolves only after an action returns nil; `ContinueOnError` permits fallback after partial effects. Both inherit global condition/action error modes. The default still stops the entire execution on error. Global first-match/first-fire policies also stop the entire execution, with precedence **panic, observed context cancellation, error stop, global selection, local advancement, completion**.
+
+`result.Group(id)` and `result.Explain().Groups()` report local selection facts independently of the global stop. Remaining members bypassed by local advancement are not evaluated with `NotEvaluatedGroupResolved`; they are never reported as unmatched or matched-and-skipped. If global termination wins at the selection boundary, untouched members use `NotEvaluatedExecutionStopped`, while the selection fact remains visible. Rule views distinguish flattened `Order`, `TopLevelOrder`, top-level `RegistrationIndex`, and optional local `MemberIndex`. See the [group contract](docs/architecture.md#local-selection-groups).
+
 ## Observation and diagnostics
 
 Use `WithObserver` on `Fire` or `NewEngineFromRuleSet` to receive synchronous ordered events through `Observer` or `ObserverFunc`. Events expose metadata and execution facts without input or executable callbacks. An observer error or recovered panic adds a separate `result.Diagnostics()` entry and disables observation for that execution; business evaluation continues under the same policy. The next execution enables the observer again. `PropagatePanics` also applies to observers.
@@ -115,7 +125,7 @@ go test ./...
 
 ## Scope and documentation
 
-Rulite v0.2 provides typed rules, immutable RuleSet/Compile and engines, descriptive metadata, indexed validation issues, deterministic single-pass execution, policies, Result, Explain, opt-in Trace, synchronous observation, and isolated diagnostics. CI checks structural performance guarantees and records repeatable benchmark comparisons. Groups, CEL, dynamic definitions, hot reload, and telemetry integration are not implemented. A separate CEL Condition adapter is a required v0.4 deliverable.
+Rulite provides typed rules, immutable RuleSet/Compile and engines, descriptive metadata, indexed validation issues, deterministic single-pass execution, policies, Result, Explain, opt-in Trace, synchronous observation, and isolated diagnostics. Basic v0.3 first-match/first-fire groups, mixed entry compilation, and structured group results are available. Broader group diagnostics and business examples remain planned. CI checks structural performance guarantees and records repeatable benchmark comparisons. CEL, dynamic definitions, hot reload, and telemetry integration are not implemented. A separate CEL Condition adapter is a required v0.4 deliverable.
 
 Read [architecture and non-goals](docs/architecture.md), the [roadmap](docs/roadmap.md), [benchmark methodology and baseline](docs/benchmarks.md), and [contributing](CONTRIBUTING.md). Later version goals are plans, not available APIs. Rulite does not replace all conditionals or provide inference, a rule language, workflow orchestration, or automatic rollback.
 

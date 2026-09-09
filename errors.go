@@ -7,6 +7,10 @@ import (
 )
 
 var (
+	// ErrInvalidGroup identifies an invalid group identity.
+	ErrInvalidGroup = errors.New("rulite: invalid group")
+	// ErrDuplicateGroupID identifies a repeated, syntactically valid group ID.
+	ErrDuplicateGroupID = errors.New("rulite: duplicate group ID")
 	// ErrInvalidRuleSet identifies a nil or uninitialized RuleSet.
 	ErrInvalidRuleSet = errors.New("rulite: invalid rule set")
 	// ErrInvalidRule identifies an invalid rule ID or a nil action.
@@ -22,19 +26,28 @@ var (
 // original registration index and, when syntactically valid, a rule ID.
 // Unwrap and Cause preserve the underlying error for errors.Is and errors.As.
 type ValidationIssue struct {
-	index  int
-	ruleID RuleID
-	cause  error
+	index       int
+	ruleID      RuleID
+	cause       error
+	groupID     GroupID
+	memberIndex int
+	inGroup     bool
+	groupIssue  bool
 }
 
 // Error returns a description of the issue, including its registration index
 // and its rule ID when available. The exact text is not a stable format.
 func (i ValidationIssue) Error() string {
 	var location string
-	if id, ok := i.RuleID(); ok {
+	if i.groupIssue {
+		location = fmt.Sprintf("group %q at registration index %d", i.groupID, i.index)
+	} else if id, ok := i.RuleID(); ok {
 		location = fmt.Sprintf("rule %q at registration index %d", id, i.index)
 	} else {
 		location = fmt.Sprintf("rule at registration index %d", i.index)
+	}
+	if i.inGroup {
+		location += fmt.Sprintf(" in group %q at member index %d", i.groupID, i.memberIndex)
 	}
 	if i.cause == nil {
 		return location
@@ -47,11 +60,20 @@ func (i ValidationIssue) Unwrap() error {
 	return i.cause
 }
 
-// Index returns the original zero-based registration index.
+// Index returns the original zero-based top-level registration index.
+// For a member issue this is the group's CompileEntries argument position.
 // An issue concerning an entire collection uses -1.
 func (i ValidationIssue) Index() int {
 	return i.index
 }
+
+// MemberIndex returns the zero-based local registration index for a member issue.
+// Top-level rule and group issues return zero and false.
+func (i ValidationIssue) MemberIndex() (int, bool) { return i.memberIndex, i.inGroup }
+
+// GroupID returns a valid group identity for group and member issues.
+// Invalid group IDs and top-level rule issues return an empty ID and false.
+func (i ValidationIssue) GroupID() (GroupID, bool) { return i.groupID, i.groupID != "" }
 
 // RuleID returns the rule ID and true if the ID is syntactically valid.
 // Otherwise it returns an empty ID and false.
@@ -64,11 +86,12 @@ func (i ValidationIssue) Cause() error {
 	return i.cause
 }
 
-// ValidationError aggregates all rule construction issues in registration
+// ValidationError aggregates all definition construction issues in registration
 // order. Each rule contributes issues in this order: ID syntax, duplicate
 // valid ID, nil condition, nil action. Only the second and later occurrences
 // of a valid ID are duplicates. Invalid IDs do not participate in that check.
-// Compile and NewEngine return a *ValidationError whenever rule validation fails.
+// CompileEntries checks a group's ID before its members in local registration
+// order. Compile, CompileEntries, and NewEngine return *ValidationError on failure.
 type ValidationError struct {
 	issues []ValidationIssue
 	byID   map[RuleID][]int

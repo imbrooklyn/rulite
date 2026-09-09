@@ -41,9 +41,9 @@ func routingEngine() (*rulite.Engine[Payment], error) {
 }
 
 func route(ctx context.Context, engine *rulite.Engine[Payment], payment *Payment) (rulite.Result, error) {
-	// In v0.1 the global policy stops the entire execution, including the audit
-	// rule. Planned v0.3 groups will allow a resolved provider group to be followed
-	// by an audit rule. Until then, perform any required audit after Fire returns.
+	// This example uses global selection, which stops before the audit rule.
+	// For an audit within the same Fire, use FirstFireGroup with CompileEntries
+	// and retain EvaluateAll as the global stop mode.
 	policy := rulite.DefaultPolicy().WithStop(rulite.StopOnFirstFire).WithActionErrors(rulite.ContinueOnError)
 	return engine.Fire(ctx, payment, rulite.WithPolicy(policy))
 }

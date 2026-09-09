@@ -1,6 +1,6 @@
 # Roadmap
 
-Rulite is a typed, deterministic, single-pass business rules engine. The v0.1 core and v0.2 RuleSet/Compile, metadata, reusable engine construction, indexed validation queries, synchronous Observer/events, isolated Result diagnostics, and benchmark regression automation are implemented. Later rows describe version goals, not release dates or available APIs.
+Rulite is a typed, deterministic, single-pass business rules engine. The v0.1 core and v0.2 RuleSet/Compile, metadata, reusable engine construction, indexed validation queries, synchronous Observer/events, isolated Result diagnostics, and benchmark regression automation are implemented. Basic v0.3 first-match/first-fire groups, mixed entry compilation, and structured group outcomes are also available. Broader group diagnostics and business examples remain planned. Later rows describe version goals, not release dates or available APIs.
 
 | Version | Goals | Explicit boundaries |
 | --- | --- | --- |
@@ -19,7 +19,7 @@ Separate bounded inference may be considered from v0.6 only for demonstrated wor
 
 Rule identity, priority order, Condition/Action signatures, match/fire distinctions, immutable engine ownership, and context/panic fundamentals are core stability candidates. During v0.x, builder names, policy constructors, Result accessors, error wrapper shapes, and Explanation/Trace structures may evolve. Exact explanation text is experimental; use structural accessors instead of parsing it.
 
-Observer/Event and diagnostic accessors are available but provisional during v0.x. Future groups, CEL, dynamic definitions, runtime replacement, and telemetry APIs remain experimental until their owning releases. Internal representations are not public contracts.
+Observer/Event, diagnostic, and group accessors are available but provisional during v0.x. Future CEL, dynamic definitions, runtime replacement, and telemetry APIs remain experimental until their owning releases. Internal representations are not public contracts.
 
 ## Non-goals
 
