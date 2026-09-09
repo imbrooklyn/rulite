@@ -496,6 +496,41 @@ go test ./cel -run '^$' -bench . -benchmem -benchtime=100ms -count=3
 | `BenchmarkBindingEval/protobuf/expressions_10` | 7,380 | 5,615 | 170 |
 | `BenchmarkBindingEval/protobuf/expressions_100` | 80,488 | 56,173 | 1,700 |
 
+## Dynamic rule measurements
+
+Measured on 2026-09-09: Apple M4 Pro, 12 logical CPUs/default GOMAXPROCS 12, macOS 26.5.2 (25F84), Go 1.27.0, darwin/arm64. Default optimization and GC settings, empty GOFLAGS/GOEXPERIMENT, no race instrumentation. The [dynamic workloads](../dynamic/benchmark_test.go) ran 18 workloads with three 100 ms samples each. Values are per-metric medians, not a latency SLA or proof of equal timing.
+
+```sh
+go test ./dynamic -run '^$' -bench . -benchmem -benchtime=100ms -count=3
+```
+
+Decode includes strict JSON scanning, typed DTO decoding, limits, and canonical ID validation. Compile starts with an existing CEL compiler and frozen registry: the JSON path includes Decode, while the definitions path copies and validates DTO storage. Both include CEL program construction, typed parameter decoding/validation, action closures and root compilation. The registered validator runs once per rule; execution parameters are decoded independently of its private values. Compiled outcomes are checked outside timing.
+
+Fire uses prebuilt sets and engines with Trace/Observer disabled. Dynamic JSON, typed rules with the same CEL expressions, and typed rules with direct Go predicates share 1/10/100 thresholds, mixed priorities and expected 1/5/50 matches. Every iteration resets input, verifies evaluated/matched/fired counts and the action counter, and retains a Result sink. All workloads report allocations. Typed Go predicates omit CEL's reflection, input validation and evaluation budgets; measure actual business expressions and callbacks before drawing capacity conclusions.
+
+| Benchmark | ns/op | B/op | allocs/op |
+| --- | ---: | ---: | ---: |
+| `BenchmarkDecode/rules_1` | 1,451 | 2,145 | 40 |
+| `BenchmarkDecode/rules_10` | 11,659 | 15,780 | 172 |
+| `BenchmarkDecode/rules_100` | 105,372 | 128,568 | 1,347 |
+| `BenchmarkCompile/json/rules_1` | 19,806 | 24,519 | 480 |
+| `BenchmarkCompile/json/rules_10` | 190,621 | 236,180 | 4,507 |
+| `BenchmarkCompile/json/rules_100` | 2,093,445 | 2,329,797 | 44,772 |
+| `BenchmarkCompile/definitions/rules_1` | 20,209 | 23,545 | 459 |
+| `BenchmarkCompile/definitions/rules_10` | 193,521 | 229,225 | 4,446 |
+| `BenchmarkCompile/definitions/rules_100` | 2,054,356 | 2,286,102 | 44,431 |
+| `BenchmarkFire/dynamic/rules_1` | 830.8 | 577 | 15 |
+| `BenchmarkFire/dynamic/rules_10` | 7,932 | 5,895 | 144 |
+| `BenchmarkFire/dynamic/rules_100` | 89,455 | 58,423 | 1,407 |
+| `BenchmarkFire/typed_cel/rules_1` | 820.8 | 577 | 15 |
+| `BenchmarkFire/typed_cel/rules_10` | 7,803 | 5,895 | 144 |
+| `BenchmarkFire/typed_cel/rules_100` | 87,876 | 58,416 | 1,407 |
+| `BenchmarkFire/typed_go/rules_1` | 79.92 | 24 | 1 |
+| `BenchmarkFire/typed_go/rules_10` | 262.4 | 360 | 4 |
+| `BenchmarkFire/typed_go/rules_100` | 1,875 | 3,048 | 7 |
+
+Dynamic and typed CEL paths retained the same allocations per Fire in these samples. Compilation and parameter validation are absent from Fire; the dynamic action performs an additional typed callback call with frozen parameters. Small timing and byte differences do not establish a general performance guarantee. Configuration size and trusted callbacks remain separate construction costs.
+
 ## Structural performance guarantees
 
 Ordinary no-trace, no-observer all-miss Fire measured 0 B/op and 0 allocs/op at every tested scale. The allocation regression test also checks that allocation does not grow with rule count and that no per-rule outcome records are created for misses. This guarantee concerns framework execution storage; caller callbacks and contexts may allocate.

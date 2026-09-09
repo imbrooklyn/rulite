@@ -7,7 +7,7 @@ Use Go 1.27 or newer. Keep the root runtime dependent only on the standard libra
 Before proposing a change, format Go files and run:
 
 ```sh
-gofmt -w *.go cel/*.go examples/*/*.go
+gofmt -w *.go cel/*.go dynamic/*.go examples/*/*.go
 go vet ./...
 go test ./...
 go test -race ./...
@@ -23,6 +23,9 @@ done
 for target in FuzzNativeComparison FuzzBoundedCompile FuzzTypedMapping; do
     go test ./cel -run '^$' -fuzz "^${target}$" -fuzztime=5s -parallel=2 || exit 1
 done
+for target in FuzzDefinitionsJSON FuzzDefinitionFieldsAndParams; do
+    go test ./dynamic -run '^$' -fuzz "^${target}$" -fuzztime=5s -parallel=2 || exit 1
+done
 ```
 
 Keep fuzz inputs bounded, seed useful edge cases, and retain reproducible failures as regression cases. Concurrent engine tests must use distinct inputs or explicit caller synchronization. Result and Explain assertions should share facts rather than duplicate execution logic.
@@ -32,6 +35,7 @@ Keep fuzz inputs bounded, seed useful edge cases, and retain reproducible failur
 ```sh
 go test -run '^$' -bench . -benchmem -benchtime=100ms -count=3
 go test ./cel -run '^$' -bench . -benchmem -benchtime=100ms -count=3
+go test ./dynamic -run '^$' -bench . -benchmem -benchtime=100ms -count=3
 ```
 
 Build engines outside Fire timing, reset mutable input between executions, verify outcome counts, and report allocations. Record hardware, Go version, and methodology when comparing results; do not enforce machine-specific nanosecond thresholds. See [benchmarks](docs/benchmarks.md).

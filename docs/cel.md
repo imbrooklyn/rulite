@@ -151,4 +151,4 @@ Shared compilers, conditions, and engines support independently owned inputs. Ca
 
 ## Scope
 
-The adapter provides conditions only. It does not implement CEL actions, a CEL policy runtime, arbitrary Go symbol/script/database execution, dynamic definitions, YAML runtime rules, hot reload, telemetry, or inference. Dynamic definitions and a typed action registry remain planned. See the [roadmap](roadmap.md) and [compile, projection, and evaluation measurements](benchmarks.md#typed-cel-binding-measurements).
+The adapter provides conditions only. The separate [dynamic integration](dynamic-rules.md) combines it with strict JSON definitions and a frozen typed Go action registry. Neither integration implements CEL actions, a CEL policy runtime, arbitrary Go symbol/script/database execution, YAML runtime rules, hot reload, telemetry, or inference. See the [roadmap](roadmap.md) and [compile, projection, and evaluation measurements](benchmarks.md#typed-cel-binding-measurements).

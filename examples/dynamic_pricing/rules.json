@@ -1,0 +1,24 @@
+[
+  {
+    "id": "pricing/vip",
+    "priority": 100,
+    "description": "Apply the premium offer when eligible",
+    "tags": ["pricing", "offer"],
+    "when": "input.VIP && input.Total >= 10000",
+    "action": "pricing.vip_discount/v1",
+    "params": {"percent": 20}
+  },
+  {
+    "id": "pricing/cap",
+    "when": "input.MaxDiscount > 0 && input.Discount > input.MaxDiscount",
+    "action": "pricing.cap/v1",
+    "params": {}
+  },
+  {
+    "id": "pricing/audit",
+    "priority": -100,
+    "when": "input.Discount > 0",
+    "action": "pricing.audit/v1",
+    "params": {"labels": ["pricing-reviewed"]}
+  }
+]

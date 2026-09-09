@@ -49,6 +49,9 @@ jobs:
           for target in FuzzNativeComparison FuzzBoundedCompile FuzzTypedMapping; do
             go test ./cel -run '^$' -fuzz "^${target}$" -fuzztime=5s -parallel=2 || exit 1
           done
+          for target in FuzzDefinitionsJSON FuzzDefinitionFieldsAndParams; do
+            go test ./dynamic -run '^$' -fuzz "^${target}$" -fuzztime=5s -parallel=2 || exit 1
+          done
 
   benchmarks:
     runs-on: ubuntu-latest
@@ -91,6 +94,13 @@ jobs:
         shell: bash
         run: |
           go test ./cel -run '^$' -bench . -benchmem -benchtime=100ms -count=3 > "$REPORT_DIR/cel-benchmarks.txt"
+      - name: Dynamic construction and runtime samples
+        working-directory: candidate
+        env:
+          REPORT_DIR: ${{ runner.temp }}/benchmark-results
+        shell: bash
+        run: |
+          go test ./dynamic -run '^$' -bench . -benchmem -benchtime=100ms -count=3 > "$REPORT_DIR/dynamic-benchmarks.txt"
       - name: Upload benchmark samples and comparison
         if: always()
         uses: actions/upload-artifact@v7
