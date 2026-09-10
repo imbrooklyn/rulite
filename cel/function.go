@@ -51,7 +51,7 @@ func (b *Builder[T]) Function[A, R any](name string, callback func(A) (R, error)
 		if text, ok := value.(types.String); ok && len(text) > maxInputBytes {
 			return types.WrapErr(ErrInputLimit)
 		}
-		native, err := value.ConvertToNative(arg)
+		native, err := convertToNative(value, arg)
 		if err != nil {
 			return types.WrapErr(err)
 		}

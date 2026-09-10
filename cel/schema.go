@@ -327,7 +327,11 @@ func (a *nativeAdapter) NativeToValue(value any) ref.Val {
 			return types.NewDynamicList(a, value)
 		}
 	case reflect.Map:
-		return types.NewDynamicMap(a, value)
+		mapping := types.NewDynamicMap(a, value)
+		if kind := v.Type().Key().Kind(); kind == reflect.Int || kind == reflect.Uint {
+			return &nativeIntegerMap{Mapper: mapping, adapter: a, value: v}
+		}
+		return mapping
 	}
 	return a.registry.NativeToValue(value)
 }
