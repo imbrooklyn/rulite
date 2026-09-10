@@ -45,6 +45,8 @@ func main() {
 
 Requires **Go 1.27+**. The root runtime depends only on the Go standard library.
 
+The current release is **v0.1.0-alpha.1**; public APIs remain provisional. The development branch includes fixes for CEL native integer conversions that are not in that tag. See the [changelog](CHANGELOG.md) for release-specific behavior and the [roadmap](docs/roadmap.md) for capability status and compatibility plans.
+
 ```sh
 go get github.com/imbrooklyn/rulite
 ```

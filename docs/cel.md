@@ -86,6 +86,12 @@ Default field names are exact, case-sensitive Go names. A field `Total int64` ta
 | Nested supported containers | Recursive typed mapping; nil pointer elements are CEL null |
 | Unsupported numeric custom representations | Explicit projection; no automatic decimal or money conversion |
 
+CEL `int` and `uint` have 64-bit ranges. Conversion into Go `int` / `uint`, including defined types, follows the target platform's actual width: 64 bits on a 64-bit target and 32 bits on a 32-bit target. Function parameters and native object literal fields, including pointer fields and nested slices/maps, reject values outside the destination type's range without truncation. Explicit-width types such as `int32` keep their own bounds. Prefer `int64` / `uint64` when the same rule and data must have identical numeric ranges across platforms.
+
+Native integer map keys use the same platform width. Indexing, `in`, optional indexing, and equality agree on existing keys. Dynamic numeric keys can match across CEL `int`, `uint`, and `double` only when their values are exactly equal; fractional or out-of-range keys cannot alias another key. Missing keys still produce an indexing error, false membership, or an absent optional value as appropriate.
+
+In `v0.1.0-alpha.1`, CEL-to-Go conversions incorrectly restricted `int` / `uint` to 32-bit ranges on 64-bit targets. This affected function parameters, native literal construction, and map lookups; membership and optional access could silently report an existing key as absent. The correction is listed in the [unreleased changes](../CHANGELOG.md). Users remaining on alpha.1 should use explicit `int64` / `uint64` in affected function signatures, map keys, and literal destination fields, or expose a typed projection with those types.
+
 Native field presence uses Go zero-value semantics. `has(input.Count)` is false for an integer zero; it does not track assignment history. A nil field pointer is absent and field access reads the pointed-to zero value. A non-nil pointer to zero is present. Nil slices/maps have size zero and are absent; non-nil empty collections also have size zero but are present. Missing map keys are runtime errors. Optional access such as `input.?Child.hasValue()` preserves these presence rules.
 
 Native object equality compares exposed fields, including pointer and collection nil presence. Hidden fields cannot influence equality. Timestamps compare as CEL timestamps. Reading a value never proves that its field is present; use `has` when that distinction matters.
