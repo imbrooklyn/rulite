@@ -1,6 +1,6 @@
 # Roadmap
 
-Rulite is a typed, deterministic, single-pass business rules engine. The current published version is **v0.1.0-alpha.1**. All implemented capabilities below are included in that prerelease; their implementation order does not imply separate v0.2–v0.5 releases. Corrections on the development branch are tracked under [Unreleased in the changelog](../CHANGELOG.md).
+Rulite is a typed, deterministic, single-pass business rules engine. The current published version is **v0.1.0-alpha.2**. All implemented capabilities below first shipped in alpha.1; their implementation order does not imply separate v0.2–v0.5 releases. Alpha.2 hardens trace recording and native CEL conversions. Release-specific changes are tracked in the [changelog](../CHANGELOG.md).
 
 ## Capability milestones
 
