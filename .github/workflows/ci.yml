@@ -30,11 +30,11 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test ./...
-      - name: CEL integer and pointer boundaries on 32-bit Go
+      - name: CEL native boundaries on 32-bit Go
         env:
           GOARCH: '386'
           CGO_ENABLED: '0'
-        run: go test ./cel -run '^(TestInteger|TestScalarPointer|FuzzIntegerConversions)' -count=1
+        run: go test ./cel -count=1
       - name: Race
         run: go test -race ./...
       - name: Dependency boundaries
@@ -51,7 +51,7 @@ jobs:
           for target in FuzzCompileMetadata FuzzRuleValidation FuzzExecutionOutcomes FuzzCombinatorNesting FuzzExecutionErrorTree FuzzObservationStream FuzzGroupExecution FuzzRuntimePublications; do
             go test . -run '^$' -fuzz "^${target}$" -fuzztime=5s -parallel=2 || exit 1
           done
-          for target in FuzzNativeComparison FuzzBoundedCompile FuzzTypedMapping FuzzIntegerConversions; do
+          for target in FuzzNativeComparison FuzzBoundedCompile FuzzTypedMapping FuzzIntegerConversions FuzzNativeConstruction FuzzNativeEquality; do
             go test ./cel -run '^$' -fuzz "^${target}$" -fuzztime=5s -parallel=2 || exit 1
           done
           for target in FuzzDefinitionsJSON FuzzDefinitionFieldsAndParams; do

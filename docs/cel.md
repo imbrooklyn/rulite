@@ -94,6 +94,10 @@ In `v0.1.0-alpha.1`, CEL-to-Go conversions incorrectly restricted `int` / `uint`
 
 Alpha.2 also fixes native literal construction for scalar pointers, including narrow integers, defined string/bool types, timestamps, and durations. Non-null values are converted to the exact pointed-to Go type, including within nested slices and maps, with integer overflow reported as a runtime error.
 
+Alpha.3 preserves CEL null when constructing native pointer fields and elements, including lists rebuilt by `map` and nested maps. A null pointer remains absent; a pointer to zero remains present. Null cannot initialize a non-pointer scalar or struct.
+
+Native struct fields require typed native objects, such as `Address: example.Address{City: 'Paris'}`. Alpha.3 rejects implicit dynamic-map-to-Go-struct conversion, such as `Address: dyn({'city': 'Paris'})`, because that upstream conversion bypasses native field mapping and resource checks. Dynamic casts of typed native objects remain supported.
+
 Native field presence uses Go zero-value semantics. `has(input.Count)` is false for an integer zero; it does not track assignment history. A nil field pointer is absent and field access reads the pointed-to zero value. A non-nil pointer to zero is present. Nil slices/maps have size zero and are absent; non-nil empty collections also have size zero but are present. Missing map keys are runtime errors. Optional access such as `input.?Child.hasValue()` preserves these presence rules.
 
 Native object equality compares exposed fields, including pointer and collection nil presence. Hidden fields cannot influence equality. Timestamps compare as CEL timestamps. Reading a value never proves that its field is present; use `has` when that distinction matters.
@@ -128,7 +132,7 @@ True and false return `bool, nil`. A final runtime error or unknown returns `fal
 
 `CompileError.Stage()` is `environment`, `parse`, `check`, `output`, or `program`. Both error wrappers expose `ExpressionID()`, a SHA-256 source digest, and `Unwrap` for `errors.Is` / `errors.As`. Identity is empty for environment failures and sources rejected by the byte limit. Default text omits source, input, activation, underlying error text, and panic contents. Explicitly unwrapped causes can contain source positions, excerpts, or business values; callers decide whether to disclose them and treat them as read-only.
 
-Runtime categories include `ErrUnknown`, `ErrCostLimit`, `ErrInputLimit`, `ErrNilBinding`, `ErrProtoDescriptor`, and `ErrFunctionPanic`. Cost failures also retain their original CEL error type. Direct condition calls reject nil context/input with wrapped root `ErrNilContext` / `ErrNilInput`.
+Runtime categories include `ErrUnknown`, `ErrCostLimit`, `ErrInputLimit`, `ErrNativeLimit`, `ErrNilBinding`, `ErrProtoDescriptor`, and `ErrFunctionPanic`. Cost and native-operation budget failures also retain their CEL cancellation error type. Direct condition calls reject nil context/input with wrapped root `ErrNilContext` / `ErrNilInput`.
 
 ## Resource and concurrency boundaries
 
@@ -142,12 +146,19 @@ Runtime categories include `ErrUnknown`, `ErrCostLimit`, `ErrInputLimit`, `ErrNi
 | Projected strings and bytes | 65,536 aggregate bytes, including map keys, nested fields, and protobuf unknown wire bytes |
 | Projected collections | 4,096 aggregate list elements and map entries; byte slices count as bytes |
 | Input traversal | At most 65,536 visited values and depth 32, including pointer/container traversal; cycles exceeding these bounds fail |
+| Native literal conversion | Per literal: 65,536 conversion visits, depth 32, 4,096 aggregate entries in visited collections, and 65,536 converted string/byte bytes; all fields share the budget |
+| Native destination storage | Per literal: conservative 1 MiB accounting for destination Go values and container storage, excluding allocator metadata and map bucket overhead; checked before allocation |
+| Native object equality | Per comparison: 65,536 visited values, depth 32, 4,096 visited collection entries, and 65,536 compared string/byte bytes; completed pointer pairs are reused within that comparison |
 | Native schema traversal | Depth 32, 256 named struct types, 128 fields per struct |
 | Protobuf registration | At most 256 files; immutable descriptors are trusted configuration |
 | CEL evaluation cost | 10,000 by default; a positive `WithCostLimit` overrides it |
 | Cancellation | Before/after projectors and evaluation, every 16 input visits, and every 16 comprehension iterations |
 
 Input checks cover all exposed projected values, including constant expressions and unused bindings. Multiple bindings share one input budget; aliasing does not exempt repeated values. The unprojected business state and hidden native fields are not traversed. Schema information is frozen at construction; input validation reads current lengths and values without converting business objects to maps.
+
+Native conversion bounds also cover CEL-generated values, including lazy concatenations, nested collections, and optional payloads. Existing typed native collection storage is reused without cloning or rewalking its contents, preserving nil presence. Storage accounting includes the struct being constructed, including the size of hidden inline fields. Equality shares its traversal budget and completed-pair cache across nested native fields, lists, and maps; pointer identity alone cannot make a value containing NaN equal to itself. All budget and comparison state belongs to the current operation.
+
+Exhausting a native operation budget aborts evaluation with `ErrNativeLimit`, detectable through `errors.Is`. Like CEL cost exhaustion, it cannot be suppressed by a surrounding collection comparison or boolean expression. These guards run inside the synchronous operation; they do not add background workers or promise a wall-clock deadline.
 
 Invalid constant regex syntax fails program construction; oversized or dynamic patterns fail checking. Counted repeats are supported within the bounds. Repeated valid cost options use the last value; zero is rejected even when followed by a valid option.
 

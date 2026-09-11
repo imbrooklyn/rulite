@@ -2,6 +2,7 @@ package cel_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -69,4 +70,22 @@ func ExampleNewBuilder() {
 	matched, err := check(context.Background(), &input)
 	fmt.Println(matched, err)
 	// Output: true <nil>
+}
+
+func ExampleErrNativeLimit() {
+	type Limited struct{ Values []int64 }
+	compiler, err := cel.NewCompiler[Limited]("input")
+	if err != nil {
+		panic(err)
+	}
+	check, err := compiler.Compile("cel_test.Limited{Values: input.Values + input.Values}.Values.size() > 0")
+	if err != nil {
+		panic(err)
+	}
+	// The input fits its budget, but the native literal would contain 8,192
+	// elements. Construction stops before allocating that destination slice.
+	input := Limited{Values: make([]int64, 4096)}
+	matched, err := check(context.Background(), &input)
+	fmt.Println(matched, errors.Is(err, cel.ErrNativeLimit))
+	// Output: false true
 }

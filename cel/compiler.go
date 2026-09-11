@@ -151,8 +151,13 @@ func evaluate(ctx context.Context, program celgo.Program, activation any, id str
 func boolOutcome(value ref.Val, err error) (bool, error) {
 	if err != nil {
 		var canceled interpreter.EvalCancelledError
-		if errors.As(err, &canceled) && canceled.Cause == interpreter.CostLimitExceeded {
-			err = errors.Join(ErrCostLimit, err)
+		if errors.As(err, &canceled) {
+			switch canceled.Cause {
+			case interpreter.CostLimitExceeded:
+				err = errors.Join(ErrCostLimit, err)
+			case nativeLimitExceeded:
+				err = errors.Join(ErrNativeLimit, err)
+			}
 		}
 		return false, err
 	}

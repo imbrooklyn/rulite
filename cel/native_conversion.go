@@ -13,6 +13,22 @@ import (
 // and nested literal fields. cel-go v0.32 treats these kinds as int32/uint32.
 // Other scalar conversions retain CEL's checked conversion semantics.
 func convertToNative(value ref.Val, target reflect.Type) (any, error) {
+	budget := newNativeBudget()
+	return budget.convert(value, target, 0)
+}
+
+func (b *nativeBudget) convert(value ref.Val, target reflect.Type, depth int) (any, error) {
+	if err := b.visit(depth); err != nil {
+		return nil, err
+	}
+	// Optional.ConvertToNative delegates directly to its payload. Unwrap here
+	// so dyn(optional.of(collection)) cannot bypass recursive bounds.
+	if optional, ok := value.(*types.Optional); ok {
+		return b.convert(optional.GetValue(), target, depth+1)
+	}
+	if err := b.takeStorage(target.Size(), 1); err != nil {
+		return nil, err
+	}
 	switch target.Kind() {
 	case reflect.Int:
 		if integer, ok := value.(types.Int); ok {
@@ -39,7 +55,7 @@ func convertToNative(value ref.Val, target reflect.Type) (any, error) {
 		// Convert to the exact scalar type before allocating its pointer.
 		// cel-go's pointer conversions cover only a subset of native scalars.
 		if scalarType(target.Elem()) != nil {
-			elem, err := convertToNative(value, target.Elem())
+			elem, err := b.convert(value, target.Elem(), depth+1)
 			if err != nil {
 				return nil, err
 			}
@@ -47,16 +63,27 @@ func convertToNative(value ref.Val, target reflect.Type) (any, error) {
 			out.Elem().Set(reflect.ValueOf(elem))
 			return out.Interface(), nil
 		}
+		if err := b.takeStorage(target.Elem().Size(), 1); err != nil {
+			return nil, err
+		}
 	case reflect.Slice:
 		if list, ok := value.(traits.Lister); ok {
+			size, err := b.collectionSize(list)
+			if err != nil {
+				return nil, err
+			}
 			// Preserve caller-owned storage and nil presence when already typed.
-			if native := reflect.ValueOf(value.Value()); native.IsValid() && native.Type().AssignableTo(target) {
+			// Calling an arbitrary CEL collection's Value can recursively
+			// materialize lazy lists before any nested bound is checked.
+			if native := collectionStorage(value); native.IsValid() && native.Type().AssignableTo(target) {
 				return native.Interface(), nil
 			}
-			size := int(list.Size().(types.Int))
+			if err := b.takeStorage(target.Elem().Size(), size); err != nil {
+				return nil, err
+			}
 			out := reflect.MakeSlice(target, size, size)
 			for i := 0; i < size; i++ {
-				elem, err := convertToNative(list.Get(types.Int(i)), target.Elem())
+				elem, err := b.convert(list.Get(types.Int(i)), target.Elem(), depth+1)
 				if err != nil {
 					return nil, err
 				}
@@ -66,25 +93,62 @@ func convertToNative(value ref.Val, target reflect.Type) (any, error) {
 		}
 	case reflect.Map:
 		if mapping, ok := value.(traits.Mapper); ok {
-			return convertNativeMap(mapping, target)
+			return b.convertMap(mapping, target, depth)
 		}
+	}
+	switch scalar := value.(type) {
+	case types.String:
+		if err := b.takeBytes(len(scalar)); err != nil {
+			return nil, err
+		}
+	case types.Bytes:
+		if err := b.takeBytes(len(scalar)); err != nil {
+			return nil, err
+		}
+	}
+	// Do not delegate aggregate conversions to cel-go: those recursively allocate
+	// outside this budget, including dynamic maps assigned to struct fields.
+	switch value.(type) {
+	case traits.Lister, traits.Mapper:
+		return nil, fmt.Errorf("cannot convert CEL %s to %v; use a typed native literal", value.Type().TypeName(), target)
 	}
 	return value.ConvertToNative(target)
 }
 
-func convertNativeMap(mapping traits.Mapper, target reflect.Type) (any, error) {
-	if native := reflect.ValueOf(mapping.Value()); native.IsValid() && native.Type().AssignableTo(target) {
+func (b *nativeBudget) collectionSize(value traits.Sizer) (int, error) {
+	size, ok := value.Size().(types.Int)
+	if !ok {
+		return 0, ErrNativeLimit
+	}
+	if err := b.takeItems(int64(size)); err != nil {
+		return 0, err
+	}
+	return int(size), nil
+}
+
+func (b *nativeBudget) convertMap(mapping traits.Mapper, target reflect.Type, depth int) (any, error) {
+	size, err := b.collectionSize(mapping)
+	if err != nil {
+		return nil, err
+	}
+	if native := collectionStorage(mapping); native.IsValid() && native.Type().AssignableTo(target) {
 		return native.Interface(), nil
 	}
-	out := reflect.MakeMapWithSize(target, int(mapping.Size().(types.Int)))
+	if err := b.takeStorage(target.Key().Size(), size); err != nil {
+		return nil, err
+	}
+	if err := b.takeStorage(target.Elem().Size(), size); err != nil {
+		return nil, err
+	}
+	out := reflect.MakeMapWithSize(target, size)
 	iterator := mapping.Iterator()
 	for iterator.HasNext() == types.True {
 		key := iterator.Next()
-		nativeKey, err := convertToNative(key, target.Key())
+		nativeKey, err := b.convert(key, target.Key(), depth+1)
 		if err != nil {
 			return nil, err
 		}
-		nativeValue, err := convertToNative(mapping.Get(key), target.Elem())
+		nativeValue, err := b.convert(mapping.Get(key), target.Elem(), depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -95,6 +159,10 @@ func convertNativeMap(mapping traits.Mapper, target reflect.Type) (any, error) {
 
 // NewValue applies the same checked conversion to every native literal field.
 func (t *nativeType) NewValue(adapter types.Adapter, fields map[string]ref.Val) ref.Val {
+	budget := newNativeBudget()
+	if err := budget.takeStorage(t.ReflectType().Size(), 1); err != nil {
+		return nativeOperationError(err)
+	}
 	out := reflect.New(t.ReflectType())
 	for name, value := range fields {
 		index, ok := t.fields[name]
@@ -102,9 +170,9 @@ func (t *nativeType) NewValue(adapter types.Adapter, fields map[string]ref.Val) 
 			return types.NewErr("no such field: %s", name)
 		}
 		field := out.Elem().Field(index)
-		native, err := convertToNative(value, field.Type())
+		native, err := budget.convert(value, field.Type(), 1)
 		if err != nil {
-			return types.WrapErr(err)
+			return nativeOperationError(err)
 		}
 		field.Set(reflect.ValueOf(native))
 	}
@@ -116,8 +184,8 @@ func (t *nativeType) NewValue(adapter types.Adapter, fields map[string]ref.Val) 
 // leave the embedded map's Get, Contains and Equal using its original Find.
 type nativeIntegerMap struct {
 	traits.Mapper
+	nativeStorage
 	adapter types.Adapter
-	value   reflect.Value
 }
 
 func (m *nativeIntegerMap) Find(key ref.Val) (ref.Val, bool) {
@@ -187,7 +255,7 @@ func (m *nativeIntegerMap) ConvertToType(target ref.Type) ref.Val {
 
 func (m *nativeIntegerMap) ConvertToNative(target reflect.Type) (any, error) {
 	if target.Kind() == reflect.Map {
-		return convertNativeMap(m, target)
+		return convertToNative(m, target)
 	}
 	return m.Mapper.ConvertToNative(target)
 }

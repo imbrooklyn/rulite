@@ -13,6 +13,9 @@ var (
 	ErrCostLimit = errors.New("rulite/cel: evaluation cost limit exceeded")
 	// ErrInputLimit identifies input exceeding the documented size limits.
 	ErrInputLimit = errors.New("rulite/cel: input size limit exceeded")
+	// ErrNativeLimit identifies native construction or equality exceeding its
+	// documented traversal, collection, byte, or storage budget.
+	ErrNativeLimit = errors.New("rulite/cel: native operation limit exceeded")
 	// ErrNilBinding identifies a nil projected root value.
 	ErrNilBinding = errors.New("rulite/cel: nil binding value")
 	// ErrProtoDescriptor identifies a message with an unexpected descriptor.

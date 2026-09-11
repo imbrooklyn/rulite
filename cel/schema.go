@@ -121,7 +121,7 @@ func (s *schema) native(tp reflect.Type, depth int) (*types.Type, error) {
 		if err != nil {
 			return nil, err
 		}
-		descriptor := &nativeType{NativeType: nt, fields: make(map[string]int)}
+		descriptor := &nativeType{NativeType: nt, fields: make(map[string]int), schema: s}
 		s.natives[tp], s.names[name] = descriptor, tp
 		s.ordered = append(s.ordered, descriptor)
 		for i := 0; i < tp.NumField(); i++ {
@@ -227,6 +227,7 @@ type nativeType struct {
 	*types.NativeType
 	fields  map[string]int
 	indexes []int
+	schema  *schema
 }
 
 // FindFieldType preserves the native checked type and exact field presence.
@@ -324,14 +325,14 @@ func (a *nativeAdapter) NativeToValue(value any) ref.Val {
 	switch v.Kind() {
 	case reflect.Slice:
 		if v.Type().Elem() != reflect.TypeFor[byte]() {
-			return types.NewDynamicList(a, value)
+			return &nativeList{Lister: types.NewDynamicList(a, value), nativeStorage: nativeStorage{v}}
 		}
 	case reflect.Map:
 		mapping := types.NewDynamicMap(a, value)
 		if kind := v.Type().Key().Kind(); kind == reflect.Int || kind == reflect.Uint {
-			return &nativeIntegerMap{Mapper: mapping, adapter: a, value: v}
+			return &nativeIntegerMap{Mapper: mapping, adapter: a, nativeStorage: nativeStorage{v}}
 		}
-		return mapping
+		return &nativeMap{Mapper: mapping, nativeStorage: nativeStorage{v}}
 	}
 	return a.registry.NativeToValue(value)
 }
@@ -369,23 +370,12 @@ func (v *nativeValue) Equal(other ref.Val) ref.Val {
 	if !ok || v.descriptor.ReflectType() != wrapped.descriptor.ReflectType() {
 		return types.False
 	}
-	for _, index := range v.descriptor.indexes {
-		left, right := nativeField(v.Value(), index), nativeField(wrapped.Value(), index)
-		switch left.Kind() {
-		case reflect.Pointer, reflect.Slice, reflect.Map:
-			if left.IsNil() != right.IsNil() {
-				return types.False
-			}
-			if left.IsNil() {
-				continue
-			}
-		}
-		equal := v.adapter.NativeToValue(nativeFieldValue(left)).Equal(v.adapter.NativeToValue(nativeFieldValue(right)))
-		if equal != types.True {
-			return equal
-		}
+	equality := nativeEquality{budget: newNativeBudget(), schema: v.descriptor.schema, adapter: v.adapter}
+	result := equality.equal(reflect.Indirect(reflect.ValueOf(v.Value())), reflect.Indirect(reflect.ValueOf(wrapped.Value())), 0, false)
+	if err, ok := result.(*types.Err); ok {
+		return nativeOperationError(err)
 	}
-	return types.True
+	return result
 }
 
 // ConvertToType keeps field adaptation intact across dynamic casts.
