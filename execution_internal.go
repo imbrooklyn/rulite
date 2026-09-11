@@ -81,11 +81,8 @@ func executeRules[T any](ctx context.Context, input *T, snapshot *compiledSnapsh
 			if panicErr == nil {
 				node.finish(matched, err)
 			}
-			if node.view.kind != ConditionLeaf {
-				tree := node.freeze(panicErr)
-				if tree.kind != ConditionLeaf {
-					timing.tree, timing.hasTree = tree, true
-				}
+			if tree := node.freeze(panicErr); tree.kind != ConditionLeaf {
+				timing.tree, timing.hasTree = tree, true
 			}
 		}
 		if panicErr != nil {
