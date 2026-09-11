@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.1.0-alpha.3
+
+- Bound CEL-to-native literal construction before allocating destination storage. Lazy concatenations, nested collections, optional payloads, and all fields of a literal share finite conversion budgets; oversized intermediate values fail with the new `cel.ErrNativeLimit` sentinel.
+- Bound native object equality and memoize completed pointer pairs within each comparison. Shared subgraphs no longer cause exponential traversal; hidden-field, nil-presence, timestamp, and NaN semantics are preserved. Budget exhaustion aborts evaluation even inside collection equality or membership.
+- Preserve CEL null in native pointer fields and container elements, including identity-mapped lists and nested maps. Non-pointer destinations still reject null.
+- Add structured construction/equality fuzz targets, pre-allocation boundary tests, shared-graph and concurrent-program regressions, and an external error-handling example. CI now runs the complete CEL suite on 32-bit Go.
+
+Compatibility: native literal conversion and equality now enforce the documented per-operation limits. Implicit `dyn(map)` conversion to Go structs is rejected because it bypasses native mapping and budgets; use a typed native object literal instead. Public function signatures and core execution contracts are unchanged. Requires Go 1.27 or later.
+
 ## v0.1.0-alpha.2
 
 - Fix traced condition combinators when a callback reuses its context recursively or concurrently. Each invocation owns its child recordings, shared recorder state is synchronized, and trace snapshots remain immutable. User callbacks run without recorder locks.

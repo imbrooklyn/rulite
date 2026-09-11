@@ -45,10 +45,10 @@ func main() {
 
 Requires **Go 1.27+**. The root runtime depends only on the Go standard library.
 
-The current release is **v0.1.0-alpha.2**; public APIs remain provisional. See the [changelog](CHANGELOG.md) for release-specific behavior and the [roadmap](docs/roadmap.md) for capability status and compatibility plans.
+The current release is **v0.1.0-alpha.3**; public APIs remain provisional. See the [changelog](CHANGELOG.md) for release-specific behavior and the [roadmap](docs/roadmap.md) for capability status and compatibility plans.
 
 ```sh
-go get github.com/imbrooklyn/rulite@v0.1.0-alpha.2
+go get github.com/imbrooklyn/rulite@v0.1.0-alpha.3
 ```
 
 ## Why not if/else?
@@ -147,7 +147,7 @@ go test ./...
 
 ## Scope and documentation
 
-Rulite provides typed rules, immutable RuleSet/Compile and engines, descriptive metadata, indexed validation issues, deterministic single-pass execution, policies, Result, Explain, opt-in Trace, synchronous observation, and isolated diagnostics. v0.3 first-match/first-fire groups, mixed entry compilation, hierarchical explanations, group end reasons, ordered resolution/completion events, and runnable payment/pricing examples are available. CI checks structural performance guarantees and records repeatable benchmark comparisons. The [CEL Condition adapter](docs/cel.md) provides native and protobuf typed bindings, explicit JSON field names, projectors, trusted unary functions, compile-time boolean checks, and bounded synchronous evaluation. [Dynamic definitions](docs/dynamic-rules.md) compile strict JSON and frozen typed action capabilities into ordinary rule sets. Runtime atomic replacement, captured version/revision metadata, and the separate OpenTelemetry integration are available.
+Rulite provides typed rules, immutable RuleSet/Compile and engines, descriptive metadata, indexed validation issues, deterministic single-pass execution, policies, Result, Explain, opt-in Trace, synchronous observation, and isolated diagnostics. First-match/first-fire groups, mixed entry compilation, hierarchical explanations, group end reasons, ordered resolution/completion events, and runnable payment/pricing examples are available. CI checks structural performance guarantees and records repeatable benchmark comparisons. The [CEL Condition adapter](docs/cel.md) provides native and protobuf typed bindings, explicit JSON field names, projectors, trusted unary functions, compile-time boolean checks, and bounded synchronous evaluation. [Dynamic definitions](docs/dynamic-rules.md) compile strict JSON and frozen typed action capabilities into ordinary rule sets. Runtime atomic replacement, captured version/revision metadata, and the separate OpenTelemetry integration are available.
 
 Read [architecture and non-goals](docs/architecture.md), the [roadmap](docs/roadmap.md), [benchmark methodology and baseline](docs/benchmarks.md), and [contributing](CONTRIBUTING.md). Later version goals are plans, not available APIs. Rulite does not replace all conditionals or provide inference, a rule language, workflow orchestration, or automatic rollback.
 
