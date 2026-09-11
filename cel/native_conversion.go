@@ -33,7 +33,9 @@ func convertToNative(value ref.Val, target reflect.Type) (any, error) {
 			return out.Interface(), nil
 		}
 	case reflect.Pointer:
-		if value != types.NullValue && (target.Elem().Kind() == reflect.Int || target.Elem().Kind() == reflect.Uint) {
+		// Convert to the exact scalar type before allocating its pointer.
+		// cel-go's pointer conversions cover only a subset of native scalars.
+		if value != types.NullValue && scalarType(target.Elem()) != nil {
 			elem, err := convertToNative(value, target.Elem())
 			if err != nil {
 				return nil, err
