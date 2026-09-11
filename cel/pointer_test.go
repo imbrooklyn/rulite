@@ -84,3 +84,39 @@ func TestScalarPointerOverflow(t *testing.T) {
 		})
 	}
 }
+
+func TestScalarPointerNullConstruction(t *testing.T) {
+	c := compiler[scalarPointers](t)
+	label, flag := pointerLabel(""), pointerFlag(false)
+	input := scalarPointers{
+		Labels: []*pointerLabel{nil, &label},
+		Flags:  map[string]*pointerFlag{"nil": nil, "zero": &flag},
+		Nested: []map[string]*int8{{"nil": nil}},
+	}
+	checkTrue(t, c, &input,
+		"!has(cel_test.scalarPointers{Label: dyn(null)}.Label)",
+		"cel_test.scalarPointers{Label: dyn(null)} != cel_test.scalarPointers{Label: ''}",
+		"cel_test.scalarPointers{Labels: input.Labels.map(x, x)}.Labels == input.Labels",
+		"cel_test.scalarPointers{Labels: [dyn(null), '']}.Labels == input.Labels",
+		"cel_test.scalarPointers{Flags: {'nil': dyn(null), 'zero': false}}.Flags == input.Flags",
+		"cel_test.scalarPointers{Nested: [{'nil': dyn(null)}]}.Nested == input.Nested")
+
+	native := compiler[nativeMapping](t)
+	objects := nativeMapping{Children: []*address{nil, {}}, Lookup: map[string]*address{"nil": nil}}
+	checkTrue(t, native, &objects,
+		"!has(cel_test.nativeMapping{Child: null}.Child)",
+		"cel_test.nativeMapping{Child: null} != cel_test.nativeMapping{Child: cel_test.address{}}",
+		"cel_test.nativeMapping{Children: input.Children.map(x, x)}.Children == input.Children",
+		"cel_test.nativeMapping{Children: [null, cel_test.address{}]}.Children == input.Children",
+		"cel_test.nativeMapping{Lookup: {'nil': null}}.Lookup == input.Lookup")
+	for _, source := range []string{
+		"cel_test.nativeMapping{Nested: dyn(null)} == input",
+		"cel_test.nativeMapping{Numbers: [dyn(null)]} == input",
+	} {
+		matched, err := condition(t, native, source)(context.Background(), &objects)
+		var runtimeErr *cel.RuntimeError
+		if matched || !errors.As(err, &runtimeErr) {
+			t.Fatalf("null assigned to a value field: matched=%t, error=%v", matched, err)
+		}
+	}
+}
